@@ -1,0 +1,6 @@
+nltk
+spacy
+textblob
+pandas
+numpy
+pymongo
