@@ -1,48 +1,33 @@
 version: '3.8'
 
 services:
-  mongo:
-    image: mongo:latest
-    container_name: mongo
+  mongodb:
+    image: mongo
     ports:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
-      - ./docker/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
 
-  poc_scraper:
+  product-review-api:
     build:
-      context: .
-      dockerfile: ./docker/Dockerfile.scraper
-    depends_on:
-      - mongo
-    environment:
-      - MONGO_URL=mongodb://mongo:27017
-    command: ["python", "/src/scrapers/pocscraper/yahoo_finance_scraper.py"]
-
-  preprocessor:
-    build: ./preprocessor
-    depends_on:
-      - mongo
-    environment:
-      - MONGO_URL=mongodb://mongo:27017
-
-  nlp_analyzer:
-    build: ./nlp_analyzer
-    depends_on:
-      - mongo
-    environment:
-      - MONGO_URL=mongodb://mongo:27017
-
-  api:
-    build: ./api
-    depends_on:
-      - mongo
-      - nlp_analyzer
+      context: ../
+      dockerfile: docker/Dockerfile.api
     ports:
-      - "5000:80"
+      - "5000:8080"
+    depends_on:
+      - mongodb
     environment:
-      - MONGO_URL=mongodb://mongo:27017
+    - ASPNETCORE_ENVIRONMENT=Development
+
+  # react-frontend:
+  #   build: ./frontend
+  #   ports:
+  #     - "3000:3000"
+
+  # scraper:
+  #   build: ./scraper
+  #   depends_on:
+  #     - mongodb
 
 volumes:
   mongo-data:
