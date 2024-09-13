@@ -1,6 +1,8 @@
+using api.Application.Products;
 using api.Models;
-using api.Services;
+using api.Persistence;
 using Microsoft.Extensions.Options;
+using MongoDB.Driver;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,12 +13,27 @@ builder.Services.Configure<ProductReviewDatabaseSettings>(
 builder.Services.AddSingleton<IProductReviewDatabaseSettings>(sp =>
     sp.GetRequiredService<IOptions<ProductReviewDatabaseSettings>>().Value);
 
-builder.Services.AddSingleton<ProductService>();
-builder.Services.AddSingleton<ReviewService>();
+builder.Services.AddScoped<ProductRepository>();
+
+// Register MongoDB client and database as services
+builder.Services.AddSingleton<IMongoClient, MongoClient>(sp =>
+{
+    var settings = sp.GetRequiredService<IOptions<ProductReviewDatabaseSettings>>().Value;
+    return new MongoClient(settings.ConnectionString);
+});
+
+builder.Services.AddScoped(sp =>
+{
+    var settings = sp.GetRequiredService<IOptions<ProductReviewDatabaseSettings>>().Value;
+    var client = sp.GetRequiredService<IMongoClient>();
+    return client.GetDatabase(settings.DatabaseName);
+});
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(List.Query).Assembly));
 
 var app = builder.Build();
 

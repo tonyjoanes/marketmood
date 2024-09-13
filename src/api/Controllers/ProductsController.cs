@@ -1,7 +1,7 @@
+using api.Application.Products;
+using api.Domain;
+using MediatR;
 using Microsoft.AspNetCore.Mvc;
-using api.Models;
-using api.Services;
-
 
 namespace api.Controllers
 {
@@ -9,56 +9,18 @@ namespace api.Controllers
     [ApiController]
     public class ProductsController : ControllerBase
     {
-        private readonly ProductService _productService;
+        public IMediator Mediator { get; set; }
 
-        public ProductsController(ProductService productService)
+        public ProductsController(IMediator mediator)
         {
-            _productService = productService;
+            Mediator = mediator;
         }
 
         [HttpGet]
-        public ActionResult<List<Product>> Get() => _productService.Get();
-
-        [HttpGet("{id:length(24)}", Name = "GetProduct")]
-        public ActionResult<Product> Get(string id)
+        public async Task<ActionResult<List<Product>>> GetProducts()
         {
-            var product = _productService.Get(id);
-            if (product == null)
-            {
-                return NotFound();
-            }
-            return product;
-        }
-
-        [HttpPost]
-        public ActionResult<Product> Create(Product product)
-        {
-            _productService.Create(product);
-            return CreatedAtRoute("GetProduct", new { id = product.Id.ToString() }, product);
-        }
-
-        [HttpPut("{id:length(24)}")]
-        public IActionResult Update(string id, Product productIn)
-        {
-            var product = _productService.Get(id);
-            if (product == null)
-            {
-                return NotFound();
-            }
-            _productService.Update(id, productIn);
-            return NoContent();
-        }
-
-        [HttpDelete("{id:length(24)}")]
-        public IActionResult Delete(string id)
-        {
-            var product = _productService.Get(id);
-            if (product == null)
-            {
-                return NotFound();
-            }
-            _productService.Remove(product.Id);
-            return NoContent();
+            Console.WriteLine("GET /api/products");
+            return await Mediator.Send(new List.Query());
         }
     }
 }

@@ -13,3 +13,8 @@ MarketMood helps people understand how everyone feels about the stock market by 
 
 1. API project -> with connection to mongo
 2. Mongo instance
+3. Frontend application localhost:3000
+
+### Bringing it down
+
+`docker-compose down`
