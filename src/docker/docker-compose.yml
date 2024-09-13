@@ -19,15 +19,14 @@ services:
     environment:
     - ASPNETCORE_ENVIRONMENT=Development
 
-  # react-frontend:
-  #   build: ./frontend
-  #   ports:
-  #     - "3000:3000"
-
-  # scraper:
-  #   build: ./scraper
-  #   depends_on:
-  #     - mongodb
+  product-frontend:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+    - "3000:80"
+    depends_on:
+    - product-review-api
 
 volumes:
   mongo-data:
