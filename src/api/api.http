@@ -1,6 +1,10 @@
-@api_HostAddress = http://localhost:5020
+### Variables
+@baseUrl = http://localhost:5000
 
-GET {{api_HostAddress}}/weatherforecast/
+### Health Check
+GET {{baseUrl}}/health
 Accept: application/json
 
-###
+### Get all products
+GET {{baseUrl}}/api/products
+Accept: application/json
