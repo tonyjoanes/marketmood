@@ -1,30 +1,27 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.5.002.0
+VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A5297EDD-4C9A-47F3-A77A-BBE704F1C068}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{437AA42B-9AB1-451F-A9B1-D894CD90E14B}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "api", "src\api\api.csproj", "{5A9D6223-8A64-4032-A634-246847BB19CA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "api", "src\api\api.csproj", "{651A6BED-D490-4411-B88C-79E570CB04CE}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
-	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{5A9D6223-8A64-4032-A634-246847BB19CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{5A9D6223-8A64-4032-A634-246847BB19CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{5A9D6223-8A64-4032-A634-246847BB19CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{5A9D6223-8A64-4032-A634-246847BB19CA}.Release|Any CPU.Build.0 = Release|Any CPU
-	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
-	GlobalSection(NestedProjects) = preSolution
-		{5A9D6223-8A64-4032-A634-246847BB19CA} = {A5297EDD-4C9A-47F3-A77A-BBE704F1C068}
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{651A6BED-D490-4411-B88C-79E570CB04CE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{651A6BED-D490-4411-B88C-79E570CB04CE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{651A6BED-D490-4411-B88C-79E570CB04CE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{651A6BED-D490-4411-B88C-79E570CB04CE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {F36FC216-7536-469C-9507-A624C0370228}
+	GlobalSection(NestedProjects) = preSolution
+		{651A6BED-D490-4411-B88C-79E570CB04CE} = {437AA42B-9AB1-451F-A9B1-D894CD90E14B}
 	EndGlobalSection
 EndGlobal
