@@ -26,28 +26,42 @@ namespace api.Controllers
         public async Task<ActionResult<Product>> GetProduct(string id)
         {
             var product = await _mediator.Send(new Details.Query { Id = id });
-            
+
             if (product == null)
                 return NotFound();
-                
+
             return product;
         }
 
         [HttpPost]
-        public async Task<ActionResult<Product>> CreateProduct(Create.Command command)
+        public async Task<ActionResult<Product>> CreateProduct(CreateProductRequest request)
         {
+            var command = new Create.Command
+            {
+                Name = request.Name,
+                Description = request.Description,
+                Brand = request.Brand,
+                Categories = request.Categories
+            };
+
             var product = await _mediator.Send(command);
             return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
         }
 
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateProduct(string id, Update.Command command)
+        public async Task<IActionResult> UpdateProduct(string id, UpdateProductRequest request)
         {
-            command.Id = id;
-            
-            try 
+            try
             {
-                await _mediator.Send(command);
+                await _mediator.Send(new Update.Command
+                {
+                    Id = id,
+                    Name = request.Name,
+                    Description = request.Description,
+                    Brand = request.Brand,
+                    Categories = request.Categories
+                });
+
                 return NoContent();
             }
             catch (Exception ex) when (ex.Message == "Product not found")
@@ -59,7 +73,7 @@ namespace api.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteProduct(string id)
         {
-            try 
+            try
             {
                 await _mediator.Send(new Delete.Command { Id = id });
                 return NoContent();

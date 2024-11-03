@@ -1,17 +1,18 @@
-using api.Domain;
 using api.Persistence;
+using FluentValidation;
 using MediatR;
-using MongoDB.Driver;
 
 namespace api.Application.Products
 {
-    public static class Update
+    public class Update
     {
         public class Command : IRequest
         {
-            public string Id { get; set; }
-            public string Name { get; set; }
-            // Add other properties as needed
+            public string Id { get; set; } = string.Empty;
+            public string Name { get; set; } = string.Empty;
+            public string Description { get; set; } = string.Empty;
+            public string Brand { get; set; } = string.Empty;
+            public List<string> Categories { get; set; } = new();
         }
 
         public class Handler : IRequestHandler<Command>
@@ -28,12 +29,34 @@ namespace api.Application.Products
                 var product = await _productRepository.GetByIdAsync(request.Id);
 
                 if (product == null)
-                    throw new Exception("Product not found");
+                    throw new ProductNotFoundException(request.Id);
 
-                product.Update(request.Name);
-                // Update other properties
+                product.Update(
+                    name: request.Name,
+                    description: request.Description,
+                    brand: request.Brand,
+                    categories: request.Categories
+                );
 
                 await _productRepository.UpdateAsync(request.Id, product);
+            }
+        }
+
+        public class CommandValidator : AbstractValidator<Command>
+        {
+            public CommandValidator()
+            {
+                RuleFor(x => x.Id).NotEmpty();
+                RuleFor(x => x.Name)
+                    .NotEmpty()
+                    .MaximumLength(200);
+                RuleFor(x => x.Description)
+                    .MaximumLength(2000);
+                RuleFor(x => x.Brand)
+                    .MaximumLength(100);
+                RuleFor(x => x.Categories)
+                    .Must(x => x.Count <= 10)
+                    .WithMessage("Cannot have more than 10 categories");
             }
         }
     }

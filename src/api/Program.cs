@@ -5,6 +5,9 @@ using api.Extensions;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using FluentValidation;
+using MediatR;
+using api.Application.Core;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,8 +37,11 @@ builder.Services.AddScoped(sp =>
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
-builder.Services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(List.Query).Assembly));
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+builder.Services.AddMediatR(cfg => {
+    cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
+    cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+});
 
 builder.Services.AddCustomHealthChecks();
 

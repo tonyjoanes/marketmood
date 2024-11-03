@@ -5,6 +5,20 @@
 GET {{baseUrl}}/health
 Accept: application/json
 
+### Create a new product
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+
+{
+    "name": "Test Product",
+    "description": "This is a test product description",
+    "brand": "Test Brand",
+    "categories": ["Electronics", "Gadgets"]
+}
+
 ### Get all products
 GET {{baseUrl}}/api/products
 Accept: application/json
+
+### Get product by ID (replace ID after creating)
+GET {{baseUrl}}/api/products/6727e394474d565a6693f7db
