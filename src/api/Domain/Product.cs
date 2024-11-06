@@ -30,7 +30,7 @@ namespace api.Domain
 
         private Product(string name, string description, string brand, List<string> categories)
         {
-            if (string.IsNullOrEmpty(name))
+            if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Name cannot be empty");
 
             Name = name;
@@ -51,7 +51,7 @@ namespace api.Domain
 
         public void Update(string name, string description, string brand, List<string> categories)
         {
-            if (string.IsNullOrEmpty(name))
+            if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Name cannot be empty");
 
             Name = name;
