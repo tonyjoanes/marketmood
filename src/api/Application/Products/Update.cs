@@ -13,15 +13,21 @@ namespace api.Application.Products
             public string Description { get; set; } = string.Empty;
             public string Brand { get; set; } = string.Empty;
             public List<string> Categories { get; set; } = new();
+            public IFormFile? Image { get; set; }
+
         }
 
         public class Handler : IRequestHandler<Command>
         {
             private readonly ProductRepository _productRepository;
+            private readonly IImageService _imageService;
 
-            public Handler(ProductRepository productRepository)
+
+            public Handler(ProductRepository productRepository, IImageService imageService)
             {
                 _productRepository = productRepository;
+                _imageService = imageService;
+
             }
 
             public async Task Handle(Command request, CancellationToken cancellationToken)
@@ -37,6 +43,13 @@ namespace api.Application.Products
                     brand: request.Brand,
                     categories: request.Categories
                 );
+
+                if (request.Image != null)
+                {
+                    var newImagePath = await _imageService.SaveImageAsync(request.Image);
+                    _imageService.DeleteImage(product.ImagePath);
+                    product.UpdateImageUrl(newImagePath);
+                }
 
                 await _productRepository.UpdateAsync(request.Id, product);
             }

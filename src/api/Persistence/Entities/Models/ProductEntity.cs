@@ -21,6 +21,9 @@ namespace api.Persistence.Entities
         [BsonElement("Brand")]
         public string Brand { get; set; }
 
+        [BsonElement("ImagePath")]
+        public string? ImagePath { get; set; }
+
         [BsonElement("Categories")]
         public List<string> Categories { get; set; }
 

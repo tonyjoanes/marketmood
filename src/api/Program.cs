@@ -44,6 +44,7 @@ builder.Services.AddMediatR(cfg => {
 });
 
 builder.Services.AddCustomHealthChecks();
+builder.Services.AddSingleton<IImageService, ImageService>();
 
 var app = builder.Build();
 
@@ -80,6 +81,8 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.UseAuthorization();
+
+app.UseStaticFiles();
 
 app.MapControllers();
 

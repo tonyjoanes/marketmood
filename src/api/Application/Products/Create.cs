@@ -14,14 +14,19 @@ namespace api.Application.Products
             public string Description { get; set; } = string.Empty;
             public string Brand { get; set; } = string.Empty;
             public List<string> Categories { get; set; } = new();
+            public IFormFile? Image { get; set; }
+
         }
 
         public class Handler : IRequestHandler<Command, Product>
         {
             private readonly ProductRepository _productRepository;
+            private readonly IImageService _imageService;
 
-            public Handler(ProductRepository productRepository)
+
+            public Handler(ProductRepository productRepository, IImageService imageService)
             {
+                _imageService = imageService;
                 _productRepository = productRepository;
             }
 
@@ -33,6 +38,11 @@ namespace api.Application.Products
                     brand: request.Brand,
                     categories: request.Categories
                 );
+
+                if (request.Image != null)
+                {
+                    product.ImagePath = await _imageService.SaveImageAsync(request.Image);
+                }
 
                 await _productRepository.CreateAsync(product);
                 return product;

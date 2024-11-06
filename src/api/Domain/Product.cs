@@ -13,6 +13,7 @@ namespace api.Domain
         public DateTime CreatedAt { get; private set; }
         public DateTime UpdatedAt { get; private set; }
         public DateTime? LastScrapedAt { get; private set; }
+        public string? ImagePath { get; set; }
 
         private Product()
         {
@@ -82,6 +83,12 @@ namespace api.Domain
         public void UpdateLastScrapedAt(DateTime scrapedAt)
         {
             LastScrapedAt = scrapedAt;
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        public void UpdateImageUrl(string newImagePath)
+        {
+            ImagePath = newImagePath;
             UpdatedAt = DateTime.UtcNow;
         }
 

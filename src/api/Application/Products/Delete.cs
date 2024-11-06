@@ -15,10 +15,12 @@ namespace api.Application.Products
         public class Handler : IRequestHandler<Command>
         {
             private readonly ProductRepository _productRepository;
+            private readonly ImageService _imageService;
 
-            public Handler(ProductRepository productRepository)
+            public Handler(ProductRepository productRepository, ImageService imageService)
             {
                 _productRepository = productRepository;
+                _imageService = imageService;
             }
 
             public async Task Handle(Command request, CancellationToken cancellationToken)
@@ -27,6 +29,9 @@ namespace api.Application.Products
 
                 if (product == null)
                     throw new Exception("Product not found");
+
+                _imageService.DeleteImage(product.ImagePath);
+
 
                 await _productRepository.DeleteAsync(request.Id);
             }
