@@ -1,8 +1,8 @@
 {
     "stryker-config": {
-        "project-file": "src/api/api.csproj",
+        "project-file": "../../api/api.csproj",
         "test-projects": [
-            "src/test/api.tests.csproj"
+            "./api.tests.csproj"
         ],
         "reporters": [
             "html",
