@@ -4,7 +4,7 @@ MarketMood helps people understand how everyone feels about the stock market by 
 
 ## Getting started
 
-1. Start up Rancher Desktop
+1. Start up Desktop for windows
 2. Check Docker running `docker -v`
 3. Navigate to `/src/docker` folder
 4. Run command `docker-compose up -d`
@@ -19,3 +19,9 @@ MarketMood helps people understand how everyone feels about the stock market by 
 ### Bringing it down
 
 `docker-compose down`
+
+## Developer Cycle
+
+### Frontend
+
+Testing it out locally with `npm run dev`

@@ -18,6 +18,8 @@ services:
       - mongodb
     environment:
     - ASPNETCORE_ENVIRONMENT=Development
+    - MONGODB_CONNECTION_STRING=mongodb://mongodb:27017
+    - MONGODB_DATABASE_NAME=productreviews
 
   product-frontend:
     build:
@@ -27,6 +29,8 @@ services:
     - "3000:80"
     depends_on:
     - product-review-api
+    environment:
+    - NEXT_PUBLIC_API_URL=http://product-review-api:80807
 
 volumes:
   mongo-data:
