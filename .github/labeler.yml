@@ -1,34 +1,20 @@
-# Add 'api' label to any changes in the api directory
-api:
-  - src/api/**/*
+"api":
+  - any: ["src/api/**/*"]
 
-# Add 'test' label to any change in test files
-test:
-  - src/test/**/*
+"test":
+  - any: ["src/test/**/*"]
 
-# Add 'frontend' label to any changes in the frontend directory
-frontend:
-  - src/frontend/**/*
+"frontend":
+  - any: ["src/frontend/**/*"]
 
-# Add 'infrastructure' label to any changes in docker or GitHub workflows
-infrastructure:
-  - src/docker/**/*
-  - .github/workflows/**/*
+"infrastructure":
+  - any: ["src/docker/**/*", ".github/workflows/**/*"]
 
-# Add 'documentation' label to any change in documentation
-documentation:
-  - "**/*.md"
-  - docs/**/*
+"documentation":
+  - any: ["**/*.md", "docs/**/*"]
 
-# Add 'dependencies' label to any change in package files
-dependencies:
-  - "**/package.json"
-  - "**/package-lock.json"
-  - "**/*.csproj"
+"dependencies":
+  - any: ["**/package.json", "**/package-lock.json", "**/*.csproj"]
 
-# Add 'configuration' label to any change in configuration files
-configuration:
-  - "**/*.json"
-  - "**/*.yml"
-  - "**/*.yaml"
-  - .editorconfig
+"configuration":
+  - any: ["**/*.json", "**/*.yml", "**/*.yaml", ".editorconfig"]
