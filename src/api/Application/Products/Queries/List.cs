@@ -1,14 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using api.Domain;
-using api.Persistence;
 using api.Persistence.Repositories;
 using MediatR;
-using MongoDB.Driver;
 
-namespace api.Application.Products
+namespace api.Application.Products.Queries
 {
     public class List
     {

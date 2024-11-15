@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using Xunit;
 using FluentAssertions;
 using api.Domain;
 

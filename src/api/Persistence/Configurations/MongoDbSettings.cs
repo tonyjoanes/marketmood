@@ -1,11 +1,6 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-
-namespace api.Persistence
+namespace api.Persistence.Configurations
 {
-    public class MongoDBSettings
+    public class MongoDbSettings
     {
         public string ConnectionString { get; set; }
         public string DatabaseName { get; set; }

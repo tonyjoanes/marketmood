@@ -1,4 +1,4 @@
-namespace api.Application.Products
+namespace api.Application.Products.DTOs
 {
     public class CreateProductRequest
     {

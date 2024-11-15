@@ -2,7 +2,7 @@ using api.Domain;
 using api.Persistence.Entities;
 using MongoDB.Driver;
 
-namespace api.Persistence
+namespace api.Persistence.Repositories
 {
     public class ProductRepository
     {

@@ -1,9 +1,9 @@
-using api.Persistence;
+using api.Application.Common.Exceptions;
 using api.Persistence.Repositories;
 using FluentValidation;
 using MediatR;
 
-namespace api.Application.Products
+namespace api.Application.Products.Commands
 {
     public class Update
     {

@@ -1,9 +1,8 @@
 using api.Infrastructure;
-using api.Persistence;
 using api.Persistence.Repositories;
 using MediatR;
 
-namespace api.Application.Products
+namespace api.Application.Products.Commands
 {
     public static class Delete
     {

@@ -1,7 +1,7 @@
-namespace api.Persistence
-{
-    using api.Domain;
+using api.Domain;
 
+namespace api.Persistence.Repositories
+{
     public interface IProductRepository
     {
         Task<List<Product>> GetAllAsync();

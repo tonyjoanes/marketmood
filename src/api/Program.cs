@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using FluentValidation;
 using MediatR;
 using api.Application.Core;
+using api.Infrastructure;
+using api.Persistence.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
 

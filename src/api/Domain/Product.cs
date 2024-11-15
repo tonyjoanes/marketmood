@@ -36,7 +36,7 @@ namespace api.Domain
             Name = name;
             Description = description;
             Brand = brand;
-            Categories = categories ?? new List<string>();
+            Categories = categories ?? [];
             Urls = new List<ProductUrl>();
             Reviews = new List<Review>();
             Analysis = new ProductAnalysis();
@@ -57,7 +57,7 @@ namespace api.Domain
             Name = name;
             Description = description;
             Brand = brand;
-            Categories = categories ?? new List<string>();
+            Categories = categories ?? [];
             UpdatedAt = DateTime.UtcNow;
         }
 

@@ -2,6 +2,9 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using api.Domain;
 using api.Application.Products;
+using api.Application.Products.Commands;
+using api.Application.Products.DTOs;
+using api.Application.Products.Queries;
 
 namespace api.Controllers
 {

@@ -1,3 +1,5 @@
+namespace api.Infrastructure;
+
 public class ImageService : IImageService
 {
     private readonly string _imageDirectory;
@@ -11,7 +13,7 @@ public class ImageService : IImageService
         _environment = environment;
         _imageDirectory = Path.Combine(_environment.WebRootPath, "images");
         _baseUrl = configuration["BaseUrl"] ?? "http://localhost:5000";
-        
+
         if (!Directory.Exists(_imageDirectory))
         {
             Directory.CreateDirectory(_imageDirectory);
@@ -57,7 +59,7 @@ public class ImageService : IImageService
     {
         if (string.IsNullOrEmpty(imagePath))
             return null;
-            
+
         return $"{_baseUrl}{imagePath}";
     }
 }
