@@ -1,4 +1,5 @@
 using api.Persistence;
+using api.Persistence.Repositories;
 using FluentValidation;
 using MediatR;
 

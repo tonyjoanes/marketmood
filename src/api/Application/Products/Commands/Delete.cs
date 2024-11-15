@@ -1,7 +1,7 @@
-using api.Domain;
+using api.Infrastructure;
 using api.Persistence;
+using api.Persistence.Repositories;
 using MediatR;
-using MongoDB.Driver;
 
 namespace api.Application.Products
 {
@@ -31,8 +31,7 @@ namespace api.Application.Products
                     throw new Exception("Product not found");
 
                 _imageService.DeleteImage(product.ImagePath);
-
-
+                
                 await _productRepository.DeleteAsync(request.Id);
             }
         }

@@ -1,5 +1,6 @@
 using api.Domain;
 using api.Persistence;
+using api.Persistence.Repositories;
 using MediatR;
 using MongoDB.Driver;
 
