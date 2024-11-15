@@ -1,6 +1,4 @@
-using api.Application.Products;
 using api.Models;
-using api.Persistence;
 using api.Extensions;
 using Microsoft.Extensions.Options;
 using MongoDB.Driver;
@@ -11,7 +9,9 @@ using api.Application.Core;
 using api.Infrastructure;
 using api.Persistence.Repositories;
 
+
 var builder = WebApplication.CreateBuilder(args);
+
 
 // Add services to the container.
 builder.Services.Configure<ProductReviewDatabaseSettings>(
