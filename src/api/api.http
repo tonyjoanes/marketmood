@@ -26,3 +26,7 @@ GET {{baseUrl}}/api/products/6727e394474d565a6693f7db
 ### Delete a product by ID (replace ID with the actual ID of the product to delete)
 DELETE {{baseUrl}}/api/products/6727e3b4474d565a6693f7dc
 Accept: application/json
+
+### Delete a product by ID (replace ID with the actual ID of the product to delete)
+DELETE {{baseUrl}}/api/products/6727e3b4474d565a6693f7dc
+Accept: application/json
