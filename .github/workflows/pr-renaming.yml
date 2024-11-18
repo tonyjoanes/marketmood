@@ -1,0 +1,25 @@
+name: "Rename Dependabot PRs"
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  rename-pr:
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]' # Ensure this only applies to Dependabot PRs
+    steps:
+      - name: Rename PR
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const originalTitle = context.payload.pull_request.title;
+            if (!originalTitle.startsWith('chore:')) {
+              const newTitle = `configuration: ${originalTitle}`;
+              await github.pulls.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.payload.pull_request.number,
+                title: newTitle
+              });
+            }
