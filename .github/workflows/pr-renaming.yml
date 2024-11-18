@@ -16,7 +16,7 @@ jobs:
             const originalTitle = context.payload.pull_request.title;
             if (!originalTitle.startsWith('chore:')) {
               const newTitle = `configuration: ${originalTitle}`;
-              await github.pulls.update({
+              await github.rest.pulls.update({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 pull_number: context.payload.pull_request.number,
