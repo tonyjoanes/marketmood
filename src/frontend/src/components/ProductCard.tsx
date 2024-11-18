@@ -1,6 +1,6 @@
 // src/components/ProductCard.tsx
 import ProductImage from './ProductImage';
-import { Product } from '@/types/product';
+import { Product } from '../types/Product'
 
 interface ProductCardProps {
     product: Product;
