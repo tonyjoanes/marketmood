@@ -3,19 +3,20 @@ import Image from 'next/image';
 import { useState } from 'react';
 
 interface ProductImageProps {
-    src: string;
+    src?: string; // Make src optional
     alt: string;
     className?: string;
 }
 
 const ProductImage = ({ src, alt, className = '' }: ProductImageProps) => {
     const [error, setError] = useState(false);
+    const defaultImage = '/images/products/placeholder.jpg'; // Add a placeholder image path
 
     return (
         <div className={`relative w-full h-48 bg-gray-50 ${className}`}>
             {!error ? (
                 <Image
-                    src={src}
+                    src={src || defaultImage} // Use default image if src is undefined
                     alt={alt}
                     fill
                     className="object-contain p-4"

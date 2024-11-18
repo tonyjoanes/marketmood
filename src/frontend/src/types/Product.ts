@@ -6,5 +6,5 @@ export interface Product {
     type: string;
     sentiment: number;
     reviewCount: number;
-    imageUrl?: string;
+    imageUrl?: string; // Make imageUrl optional
 }
