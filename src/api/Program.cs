@@ -47,7 +47,7 @@ builder.Services.AddMediatR(cfg =>
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 });
 
-builder.Services.AddCustomHealthChecks();
+builder.Services.AddCustomHealthChecks(builder.Configuration);
 builder.Services.AddSingleton<IImageService, ImageService>();
 
 var app = builder.Build();
