@@ -1,11 +1,12 @@
 // app/page.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import ProductCard from '@/components/ProductCard';
 import { Product } from '@/types/Product';
 import { productsData } from '@/data/Products';
+import { productService } from '@/services/ProductService';
 
 // Separate ProductGrid component
 const ProductGrid = ({ products, title }: { products: Product[], title: string }) => (
@@ -29,22 +30,40 @@ const ProductGrid = ({ products, title }: { products: Product[], title: string }
 );
 
 const Page = () => {
+  const [products, setProducts] = useState<Product[]>([]);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async (query: string) => {
-    setIsSearching(true);
-    setTimeout(() => {
-      const filtered = productsData.filter(product => {
-        const searchLower = query.toLowerCase();
-        const fullName = `${product.brand} ${product.model}`.toLowerCase();
-        const type = product.type.toLowerCase();
-        return fullName.includes(searchLower) || type.includes(searchLower);
-      });
-      setSearchResults(filtered);
-      setIsSearching(false);
-    }, 500);
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  const loadProducts = async () => {
+    try {
+      const data = await productService.getProducts();
+      setProducts(data);
+    } catch (err) {
+      setError('Failed to load products');
+      console.error(err);
+    }
   };
+
+  const handleSearch = (query: string) => {
+    setIsSearching(true);
+    const filtered = products.filter(product => {
+      const searchLower = query.toLowerCase();
+      const fullName = `${product.brand} ${product.model}`.toLowerCase();
+      return fullName.includes(searchLower) ||
+        product.type.toLowerCase().includes(searchLower);
+    });
+    setSearchResults(filtered);
+    setIsSearching(false);
+  };
+
+  if (error) {
+    return <div className="text-red-600 p-4">{error}</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">

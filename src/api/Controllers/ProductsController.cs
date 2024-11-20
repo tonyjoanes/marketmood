@@ -41,10 +41,12 @@ namespace api.Controllers
         {
             var command = new Create.Command
             {
-                Name = request.Name,
-                Description = request.Description,
                 Brand = request.Brand,
-                Categories = request.Categories
+                Model = request.Model,
+                Type = request.Type,
+                ReviewCount = request.ReviewCount,
+                Sentiment = request.Sentiment,
+                ImageUrl = request.ImageUrl
             };
 
             var product = await _mediator.Send(command);
@@ -59,10 +61,12 @@ namespace api.Controllers
                 await _mediator.Send(new Update.Command
                 {
                     Id = id,
-                    Name = request.Name,
-                    Description = request.Description,
                     Brand = request.Brand,
-                    Categories = request.Categories
+                    Model = request.Model,
+                    Type = request.Type,
+                    ReviewCount = request.ReviewCount,
+                    Sentiment = request.Sentiment,
+                    ImageUrl = request.ImageUrl
                 });
 
                 return NoContent();

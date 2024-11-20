@@ -3,61 +3,73 @@ namespace api.Domain
     public class Product
     {
         public string? Id { get; private set; }
-        public string Name { get; private set; }
-        public string Description { get; private set; }
         public string Brand { get; private set; }
+        public string Model { get; private set; }
+        public double Sentiment { get; private set; }
+        public int ReviewCount { get; private set; }
+        public string? ImageUrl { get; set; }
+        public string Type { get; set; }
         public List<string> Categories { get; private set; }
         public List<ProductUrl> Urls { get; private set; }
-        public List<Review> Reviews { get; private set; }
+        public List<ProductReview> Reviews { get; private set; }
         public ProductAnalysis Analysis { get; private set; }
         public DateTime CreatedAt { get; private set; }
         public DateTime UpdatedAt { get; private set; }
         public DateTime? LastScrapedAt { get; private set; }
-        public string? ImagePath { get; set; }
 
         private Product()
         {
-            Name = string.Empty;
-            Description = string.Empty;
             Brand = string.Empty;
+            Model = string.Empty;
+            ReviewCount = 0;
             Categories = new List<string>();
             Urls = new List<ProductUrl>();
-            Reviews = new List<Review>();
+            Reviews = new List<ProductReview>();
             Analysis = new ProductAnalysis();
             CreatedAt = DateTime.UtcNow;
             UpdatedAt = DateTime.UtcNow;
         }
 
-        private Product(string name, string description, string brand, List<string> categories)
+        private Product(string brand, string model, string type, double sentiment, int reviewCount, string imageUrl)
         {
-            if (string.IsNullOrWhiteSpace(name))
-                throw new ArgumentException("Name cannot be empty");
+            if (string.IsNullOrWhiteSpace(brand))
+                throw new ArgumentException("Brand cannot be empty");
 
-            Name = name;
-            Description = description;
+            if (string.IsNullOrWhiteSpace(model))
+                throw new ArgumentException("Model cannot be empty");
+
             Brand = brand;
-            Categories = categories ?? [];
+            Model = model;
+            Type = type;
+            Sentiment = sentiment;
+            ReviewCount = reviewCount;
+            ImageUrl = imageUrl;
+            Categories = [];
             Urls = new List<ProductUrl>();
-            Reviews = new List<Review>();
+            Reviews = new List<ProductReview>();
             Analysis = new ProductAnalysis();
             CreatedAt = DateTime.UtcNow;
             UpdatedAt = DateTime.UtcNow;
         }
 
-        public static Product Create(string name, string description, string brand, List<string> categories)
+        public static Product Create(string brand, string model, string type, double sentiment, int reviewCount, string imageUrl)
         {
-            return new Product(name, description, brand, categories);
+            return new Product(brand, model, type, sentiment, reviewCount, imageUrl);
         }
 
-        public void Update(string name, string description, string brand, List<string> categories)
+        public void Update(string brand, string model, string type, double sentiment, int reviewCount, string imageUrl)
         {
-            if (string.IsNullOrWhiteSpace(name))
+            if (string.IsNullOrWhiteSpace(brand))
                 throw new ArgumentException("Name cannot be empty");
+            if (string.IsNullOrWhiteSpace(model))
+                throw new ArgumentException("Model cannot be empty");
 
-            Name = name;
-            Description = description;
+            Model = model;
             Brand = brand;
-            Categories = categories ?? [];
+            Type = type;
+            Sentiment = sentiment;
+            ReviewCount = reviewCount;
+            ImageUrl = imageUrl;
             UpdatedAt = DateTime.UtcNow;
         }
 
@@ -68,7 +80,7 @@ namespace api.Domain
             UpdatedAt = DateTime.UtcNow;
         }
 
-        public void AddReview(Review review)
+        public void AddReview(ProductReview review)
         {
             Reviews.Add(review);
             UpdatedAt = DateTime.UtcNow;
@@ -88,7 +100,7 @@ namespace api.Domain
 
         public void UpdateImageUrl(string newImagePath)
         {
-            ImagePath = newImagePath;
+            ImageUrl = newImagePath;
             UpdatedAt = DateTime.UtcNow;
         }
 

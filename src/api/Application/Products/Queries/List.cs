@@ -12,9 +12,9 @@ namespace api.Application.Products.Queries
 
         public class Handler : IRequestHandler<Query, List<Product>>
         {
-            private ProductRepository _productRepository;
+            private IProductRepository _productRepository;
 
-            public Handler(ProductRepository productRepository)
+            public Handler(IProductRepository productRepository)
             {
                 _productRepository = productRepository;
             }

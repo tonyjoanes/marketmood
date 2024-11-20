@@ -10,21 +10,22 @@ namespace api.Application.Products.Commands
         public class Command : IRequest
         {
             public string Id { get; set; } = string.Empty;
-            public string Name { get; set; } = string.Empty;
-            public string Description { get; set; } = string.Empty;
+            public string Model { get; set; } = string.Empty;
+            public string Type { get; set; } = string.Empty;
             public string Brand { get; set; } = string.Empty;
-            public List<string> Categories { get; set; } = new();
-            public IFormFile? Image { get; set; }
+            public double Sentiment { get; set; } = 0;
+            public string ImageUrl { get; set; } = string.Empty;
+            public int ReviewCount { get; set; } = 0;
 
         }
 
         public class Handler : IRequestHandler<Command>
         {
-            private readonly ProductRepository _productRepository;
+            private readonly IProductRepository _productRepository;
             private readonly IImageService _imageService;
 
 
-            public Handler(ProductRepository productRepository, IImageService imageService)
+            public Handler(IProductRepository productRepository, IImageService imageService)
             {
                 _productRepository = productRepository;
                 _imageService = imageService;
@@ -39,18 +40,20 @@ namespace api.Application.Products.Commands
                     throw new ProductNotFoundException(request.Id);
 
                 product.Update(
-                    name: request.Name,
-                    description: request.Description,
                     brand: request.Brand,
-                    categories: request.Categories
+                    model: request.Model,
+                    type: request.Type,
+                    reviewCount: request.ReviewCount,
+                    sentiment: request.Sentiment,
+                    imageUrl: request.ImageUrl
                 );
 
-                if (request.Image != null)
-                {
-                    var newImagePath = await _imageService.SaveImageAsync(request.Image);
-                    _imageService.DeleteImage(product.ImagePath);
-                    product.UpdateImageUrl(newImagePath);
-                }
+                // if (request.Image != null)
+                // {
+                //     var newImagePath = await _imageService.SaveImageAsync(request.Image);
+                //     _imageService.DeleteImage(product.ImagePath);
+                //     product.UpdateImageUrl(newImagePath);
+                // }
 
                 await _productRepository.UpdateAsync(request.Id, product);
             }
@@ -61,16 +64,16 @@ namespace api.Application.Products.Commands
             public CommandValidator()
             {
                 RuleFor(x => x.Id).NotEmpty();
-                RuleFor(x => x.Name)
+                RuleFor(x => x.Brand)
                     .NotEmpty()
                     .MaximumLength(200);
-                RuleFor(x => x.Description)
+                RuleFor(x => x.Model)
                     .MaximumLength(2000);
-                RuleFor(x => x.Brand)
+                RuleFor(x => x.Type)
                     .MaximumLength(100);
-                RuleFor(x => x.Categories)
-                    .Must(x => x.Count <= 10)
-                    .WithMessage("Cannot have more than 10 categories");
+                // RuleFor(x => x.Categories)
+                //     .Must(x => x.Count <= 10)
+                //     .WithMessage("Cannot have more than 10 categories");
             }
         }
     }

@@ -20,7 +20,8 @@ builder.Services.Configure<ProductReviewDatabaseSettings>(
 builder.Services.AddSingleton<IProductReviewDatabaseSettings>(sp =>
     sp.GetRequiredService<IOptions<ProductReviewDatabaseSettings>>().Value);
 
-builder.Services.AddScoped<ProductRepository>();
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<IProductReviewRepository, ProductReviewRepository>();
 
 // Register MongoDB client and database as services
 builder.Services.AddSingleton<IMongoClient, MongoClient>(sp =>
@@ -40,7 +41,8 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
-builder.Services.AddMediatR(cfg => {
+builder.Services.AddMediatR(cfg =>
+{
     cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
     cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
 });
