@@ -5,6 +5,7 @@ using api.Application.Products;
 using api.Application.Products.Commands;
 using api.Application.Products.DTOs;
 using api.Application.Products.Queries;
+using api.Application.Common.Exceptions;
 
 namespace api.Controllers
 {
@@ -41,10 +42,12 @@ namespace api.Controllers
         {
             var command = new Create.Command
             {
-                Name = request.Name,
-                Description = request.Description,
                 Brand = request.Brand,
-                Categories = request.Categories
+                Model = request.Model,
+                Type = request.Type,
+                ReviewCount = request.ReviewCount,
+                Sentiment = request.Sentiment,
+                ImageUrl = request.ImageUrl
             };
 
             var product = await _mediator.Send(command);
@@ -59,10 +62,12 @@ namespace api.Controllers
                 await _mediator.Send(new Update.Command
                 {
                     Id = id,
-                    Name = request.Name,
-                    Description = request.Description,
                     Brand = request.Brand,
-                    Categories = request.Categories
+                    Model = request.Model,
+                    Type = request.Type,
+                    ReviewCount = request.ReviewCount,
+                    Sentiment = request.Sentiment,
+                    ImageUrl = request.ImageUrl
                 });
 
                 return NoContent();
@@ -81,7 +86,7 @@ namespace api.Controllers
                 await _mediator.Send(new Delete.Command { Id = id });
                 return NoContent();
             }
-            catch (Exception ex) when (ex.Message == "Product not found")
+            catch (ProductNotFoundException)
             {
                 return NotFound();
             }

@@ -8,29 +8,29 @@ services:
     volumes:
       - mongo-data:/data/db
 
-  product-review-api:
-    build:
-      context: ../
-      dockerfile: docker/Dockerfile.api
-    ports:
-      - "5000:8080"
-    depends_on:
-      - mongodb
-    environment:
-    - ASPNETCORE_ENVIRONMENT=Development
-    - MONGODB_CONNECTION_STRING=mongodb://mongodb:27017
-    - MONGODB_DATABASE_NAME=productreviews
+  # product-review-api:
+  #   build:
+  #     context: ../
+  #     dockerfile: docker/Dockerfile.api
+  #   ports:
+  #     - "5000:8080"
+  #   depends_on:
+  #     - mongodb
+  #   environment:
+  #   - ASPNETCORE_ENVIRONMENT=Development
+  #   - MONGODB_CONNECTION_STRING=mongodb://mongodb:27017
+  #   - MONGODB_DATABASE_NAME=productreviews
 
-  product-frontend:
-    build:
-      context: ../
-      dockerfile: docker/Dockerfile.frontend
-    ports:
-    - "3000:80"
-    depends_on:
-    - product-review-api
-    environment:
-    - NEXT_PUBLIC_API_URL=http://product-review-api:80807
+  # product-frontend:
+  #   build:
+  #     context: ../
+  #     dockerfile: docker/Dockerfile.frontend
+  #   ports:
+  #   - "3000:80"
+  #   depends_on:
+  #   - product-review-api
+  #   environment:
+  #   - NEXT_PUBLIC_API_URL=http://product-review-api:80807
 
 volumes:
   mongo-data:

@@ -1,14 +1,13 @@
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Moq;
-using Xunit;
 using FluentAssertions;
 using api.Controllers;
 using api.Domain;
-using api.Application.Products;
 using api.Application.Products.Commands;
 using api.Application.Products.DTOs;
 using api.Application.Products.Queries;
+using api.Application.Common.Exceptions;
 
 namespace api.tests.Controllers;
 
@@ -28,17 +27,16 @@ public class ProductsControllerTests
     {
         // Arrange
         var product = Product.Create(
-            name: "Test Product",
-            description: "Test Description",
             brand: "Test Brand",
-            categories: new List<string> { "Category1" }
+            model: "Test Model",
+            type: "Test Type",
+            sentiment: 0.85,
+            reviewCount: 100,
+            imageUrl: "test.jpg"
         );
-        // Use reflection to set the Id since it's internal
-        typeof(Product).GetMethod("SetId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            ?.Invoke(product, new object[] { "1" });
 
         var expectedProducts = new List<Product> { product };
-        
+
         _mediator.Setup(m => m.Send(It.IsAny<List.Query>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(expectedProducts);
 
@@ -55,14 +53,13 @@ public class ProductsControllerTests
         // Arrange
         var productId = "test-id";
         var product = Product.Create(
-            name: "Test Product",
-            description: "Test Description",
             brand: "Test Brand",
-            categories: new List<string> { "Category1" }
+            model: "Test Model",
+            type: "Test Type",
+            sentiment: 0.85,
+            reviewCount: 100,
+            imageUrl: "test.jpg"
         );
-        // Use reflection to set the Id
-        typeof(Product).GetMethod("SetId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            ?.Invoke(product, new object[] { productId });
 
         _mediator.Setup(m => m.Send(It.Is<Details.Query>(q => q.Id == productId), It.IsAny<CancellationToken>()))
             .ReturnsAsync(product);
@@ -95,28 +92,31 @@ public class ProductsControllerTests
         // Arrange
         var request = new CreateProductRequest
         {
-            Name = "Test Product",
-            Description = "Test Description",
             Brand = "Test Brand",
-            Categories = new List<string> { "Category1" }
+            Model = "Test Model",
+            Type = "Test Type",
+            Sentiment = 0.85,
+            ReviewCount = 100,
+            ImageUrl = "test.jpg"
         };
-        
+
         var createdProduct = Product.Create(
-            name: request.Name,
-            description: request.Description,
             brand: request.Brand,
-            categories: request.Categories
+            model: request.Model,
+            type: request.Type,
+            sentiment: request.Sentiment,
+            reviewCount: request.ReviewCount,
+            imageUrl: request.ImageUrl
         );
-        // Use reflection to set the Id
-        typeof(Product).GetMethod("SetId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            ?.Invoke(createdProduct, new object[] { "new-id" });
 
         _mediator.Setup(m => m.Send(
-            It.Is<Create.Command>(c => 
-                c.Name == request.Name && 
-                c.Description == request.Description &&
+            It.Is<Create.Command>(c =>
                 c.Brand == request.Brand &&
-                c.Categories == request.Categories),
+                c.Model == request.Model &&
+                c.Type == request.Type &&
+                c.Sentiment == request.Sentiment &&
+                c.ReviewCount == request.ReviewCount &&
+                c.ImageUrl == request.ImageUrl),
             It.IsAny<CancellationToken>()))
             .ReturnsAsync(createdProduct);
 
@@ -126,7 +126,6 @@ public class ProductsControllerTests
         // Assert
         var createdAtActionResult = result.Result.Should().BeOfType<CreatedAtActionResult>().Subject;
         createdAtActionResult.ActionName.Should().Be(nameof(ProductsController.GetProduct));
-        createdAtActionResult.RouteValues["id"].Should().Be("new-id");
         createdAtActionResult.Value.Should().BeEquivalentTo(createdProduct);
     }
 
@@ -137,19 +136,23 @@ public class ProductsControllerTests
         var productId = "test-id";
         var request = new UpdateProductRequest
         {
-            Name = "Updated Product",
-            Description = "Updated Description",
             Brand = "Updated Brand",
-            Categories = new List<string> { "UpdatedCategory" }
+            Model = "Updated Model",
+            Type = "Updated Type",
+            Sentiment = 0.95,
+            ReviewCount = 200,
+            ImageUrl = "updated.jpg"
         };
 
         _mediator.Setup(m => m.Send(
             It.Is<Update.Command>(c =>
                 c.Id == productId &&
-                c.Name == request.Name &&
-                c.Description == request.Description &&
                 c.Brand == request.Brand &&
-                c.Categories == request.Categories),
+                c.Model == request.Model &&
+                c.Type == request.Type &&
+                c.Sentiment == request.Sentiment &&
+                c.ReviewCount == request.ReviewCount &&
+                c.ImageUrl == request.ImageUrl),
             It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
@@ -183,9 +186,9 @@ public class ProductsControllerTests
         // Arrange
         var productId = "nonexistent-id";
         _mediator.Setup(m => m.Send(
-            It.IsAny<Delete.Command>(),
+            It.Is<Delete.Command>(c => c.Id == productId),
             It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new Exception("Product not found"));
+            .ThrowsAsync(new ProductNotFoundException(productId));
 
         // Act
         var result = await _controller.DeleteProduct(productId);

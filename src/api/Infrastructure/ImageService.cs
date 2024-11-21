@@ -10,14 +10,14 @@ public class ImageService : IImageService
         IWebHostEnvironment environment,
         IConfiguration configuration)
     {
-        _environment = environment;
-        _imageDirectory = Path.Combine(_environment.WebRootPath, "images");
-        _baseUrl = configuration["BaseUrl"] ?? "http://localhost:5000";
+        // _environment = environment;
+        // _imageDirectory = Path.Combine(_environment.WebRootPath, "images");
+        // _baseUrl = configuration["BaseUrl"] ?? "http://localhost:5000";
 
-        if (!Directory.Exists(_imageDirectory))
-        {
-            Directory.CreateDirectory(_imageDirectory);
-        }
+        // if (!Directory.Exists(_imageDirectory))
+        // {
+        //     Directory.CreateDirectory(_imageDirectory);
+        // }
     }
 
     public async Task<string> SaveImageAsync(IFormFile file)

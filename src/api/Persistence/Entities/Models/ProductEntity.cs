@@ -9,29 +9,23 @@ namespace api.Persistence.Entities
         [BsonRepresentation(BsonType.ObjectId)]
         public string Id { get; set; }
 
-        [BsonElement("Name")]
-        public string Name { get; set; }
-
-        [BsonElement("Urls")]
-        public List<ProductUrlEntity> Urls { get; set; }
-
-        [BsonElement("Description")]
-        public string Description { get; set; }
+        [BsonElement("Model")]
+        public string Model { get; set; }
 
         [BsonElement("Brand")]
         public string Brand { get; set; }
 
-        [BsonElement("ImagePath")]
-        public string? ImagePath { get; set; }
+        [BsonElement("ImageUrl")]
+        public string? ImageUrl { get; set; }
 
-        [BsonElement("Categories")]
-        public List<string> Categories { get; set; }
+        [BsonElement("Type")]
+        public string Type { get; set; }
 
-        [BsonElement("Reviews")]
-        public List<ReviewEntity> Reviews { get; set; }
+        [BsonElement("ReviewCount")]
+        public int ReviewCount { get; set; }
 
-        [BsonElement("Analysis")]
-        public ProductAnalysisEntity Analysis { get; set; }
+        [BsonElement("Sentiment")]
+        public double Sentiment { get; set; }
 
         [BsonElement("CreatedAt")]
         public DateTime CreatedAt { get; set; }

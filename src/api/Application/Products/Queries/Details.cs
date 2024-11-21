@@ -13,9 +13,9 @@ namespace api.Application.Products.Queries
 
         public class Handler : IRequestHandler<Query, Product>
         {
-            private readonly ProductRepository _productRepository;
+            private readonly IProductRepository _productRepository;
 
-            public Handler(ProductRepository productRepository)
+            public Handler(IProductRepository productRepository)
             {
                 _productRepository = productRepository;
             }

@@ -1,68 +1,222 @@
+from pymongo import ASCENDING, DESCENDING, MongoClient
 import requests
 from bs4 import BeautifulSoup
-import schedule
+from typing import List, Dict, Optional
 import time
-import re
+import random
+from dataclasses import dataclass
+from datetime import datetime
 
-# Set to keep track of processed review IDs
-processed_review_ids = set()
+@dataclass
+class Review:
+    product_id: str
+    review_id: str
+    rating: int
+    title: str
+    content: str
+    author: str
+    date: datetime
+    verified_purchase: bool
+    helpful_votes: int
 
-def extract_product_id(url):
-    pattern = r'/dp/([A-Z0-9]+)'
-    match = re.search(pattern, url)
-    if match:
-        return match.group(1)
-    else:
-        print("Could not extract product ID from the URL")
-        return None
-
-def fetch_amazon_reviews(product_url, review_type='most_recent'):
-    product_id = extract_product_id(product_url)
-    if not product_id:
-        return
-    
-    if review_type == 'most_recent':
-        reviews_url = f'https://www.amazon.co.uk/product-reviews/{product_id}/ref=cm_cr_arp_d_viewopt_rvwer?sortBy=recent'
-    elif review_type == 'top_reviews':
-        reviews_url = f'https://www.amazon.co.uk/product-reviews/{product_id}/ref=cm_cr_arp_d_viewopt_rvwer?sortBy=helpful'
-    else:
-        print("Invalid review type specified. Use 'most_recent' or 'top_reviews'.")
-        return
-
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    response = requests.get(reviews_url, headers=headers)
-    
-    if response.status_code == 200:
-        print(f"Successfully fetched the {review_type.replace('_', ' ')} page")
-        soup = BeautifulSoup(response.text, 'html.parser')
-        reviews = extract_reviews(soup)
-        print(f"Extracted {len(reviews)} reviews")
+class ReviewRepository:
+    def __init__(self, connection_string: str = "mongodb://localhost:27017"):
+        self.client = MongoClient(connection_string)
+        self.db = self.client.marketmood
+        self.reviews = self.db.reviews
+        self.product_metadata = self.db.product_metadata
+        
+        # Create indexes
+        self.reviews.create_index([("review_id", ASCENDING)], unique=True)
+        self.reviews.create_index([("product_id", ASCENDING), ("date", DESCENDING)])
+        
+    def save_reviews(self, reviews: List[Review]) -> Dict[str, int]:
+        """
+        Save reviews to MongoDB and return statistics about the operation
+        """
+        stats = {"attempted": 0, "inserted": 0, "duplicates": 0}
+        
         for review in reviews:
-            print(review)
-    else:
-        print(f"Failed to fetch the page. Status code: {response.status_code}")
+            stats["attempted"] += 1
+            try:
+                self.reviews.insert_one(asdict(review))
+                stats["inserted"] += 1
+            except DuplicateKeyError:
+                stats["duplicates"] += 1
+                
+        return stats
+    
+    def get_latest_review_date(self, product_id: str) -> Optional[datetime]:
+        """
+        Get the date of the most recent review for a product
+        """
+        latest_review = self.reviews.find_one(
+            {"product_id": product_id},
+            sort=[("date", DESCENDING)]
+        )
+        return latest_review["date"] if latest_review else None
+    
+    def update_product_metadata(self, product_id: str, last_scraped: datetime):
+        """
+        Update metadata about when the product was last scraped
+        """
+        self.product_metadata.update_one(
+            {"product_id": product_id},
+            {
+                "$set": {
+                    "last_scraped": last_scraped,
+                    "updated_at": datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
 
-def extract_reviews(soup):
-    reviews = []
-    for review in soup.find_all('div', {'data-hook': 'review'}):
-        review_id = review.get('id')
-        if review_id and review_id not in processed_review_ids:
-            review_text = review.find('span', {'data-hook': 'review-body'}).text.strip()
-            star_rating = review.find('i', {'data-hook': 'review-star-rating'}).text.split(' ')[0].strip()
-            reviews.append({'id': review_id, 'text': review_text, 'rating': star_rating})
-            processed_review_ids.add(review_id)
-    return reviews
+class AmazonScraper:
+    def __init__(self):
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        self.base_url = "https://www.amazon.co.uk"
+    
+    def get_product_reviews(self, product_id: str, pages: int = 3, since_date: Optional[datetime] = None) -> List[Review]:
+        reviews = []
+        for page in range(1, pages + 1):
+            url = f"{self.base_url}/dp/{product_id}/ref=cm_cr_getr_d_paging_btm_next_{page}?pageNumber={page}"
+            
+            try:
+                response = requests.get(url, headers=self.headers)
+                print(f"Fetched {response.status_code} reviews for product {product_id}")
+                
+                if response.status_code == 200:
+                    page_reviews = self._parse_reviews_page(response.content, product_id)
+                    
+                    # If we have a since_date, only keep newer reviews
+                    if since_date:
+                        page_reviews = [r for r in page_reviews if r.date > since_date]
+                        
+                        # If all reviews on this page are old, we can stop paginating
+                        if not page_reviews:
+                            print(f"No new reviews found on page {page}, stopping pagination")
+                            break
+                            
+                    reviews.extend(page_reviews)
+                
+                # Respect rate limits
+                time.sleep(random.uniform(2, 5))
+                
+            except Exception as e:
+                print(f"Error fetching page {page} for product {product_id}: {str(e)}")
+                continue
+                
+        return reviews
+    
+    def _parse_reviews_page(self, html_content: bytes, product_id: str) -> List[Review]:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        review_elements = soup.find_all('div', {'data-hook': 'review'})
+        reviews = []
+        
+        for element in review_elements:
+            try:
+                review = self._parse_review(element, product_id)
+                if review:
+                    reviews.append(review)
+            except Exception as e:
+                print(f"Error parsing review: {str(e)}")
+                continue
+                
+        return reviews
+    
+    def _parse_review(self, review_element: BeautifulSoup, product_id: str) -> Optional[Review]:
+        try:
+            # Extract review ID from the element's ID attribute
+            review_id = review_element.get('id', '')
+            
+            # Find rating
+            rating_element = review_element.find('i', {'data-hook': 'review-star-rating'})
+            rating = int(rating_element.text.split('.')[0]) if rating_element else 0
+            
+            # Find title
+            title_element = review_element.find('a', {'data-hook': 'review-title'})
+            title = title_element.text.strip() if title_element else ''
+            
+            # Find content
+            content_element = review_element.find('span', {'data-hook': 'review-body'})
+            content = content_element.text.strip() if content_element else ''
+            
+            # Find author
+            author_element = review_element.find('span', {'class': 'a-profile-name'})
+            author = author_element.text.strip() if author_element else ''
+            
+            # Find date
+            date_element = review_element.find('span', {'data-hook': 'review-date'})
+            date_str = date_element.text.split('on ')[-1] if date_element else ''
+            date = datetime.strptime(date_str, '%d %B %Y')
+            
+            # Check if verified purchase
+            verified_element = review_element.find('span', {'data-hook': 'avp-badge'})
+            verified_purchase = bool(verified_element)
+            
+            # Find helpful votes
+            helpful_element = review_element.find('span', {'data-hook': 'helpful-vote-statement'})
+            helpful_votes = int(helpful_element.text.split()[0]) if helpful_element else 0
+            
+            return Review(
+                product_id=product_id,
+                review_id=review_id,
+                rating=rating,
+                title=title,
+                content=content,
+                author=author,
+                date=date,
+                verified_purchase=verified_purchase,
+                helpful_votes=helpful_votes
+            )
+            
+        except Exception as e:
+            print(f"Error parsing review details: {str(e)}")
+            return None
 
-# Schedule the scraper to run once a day
-schedule.every().day.at("02:00").do(fetch_amazon_reviews, 
-                                    'https://www.amazon.co.uk/HP-Black-Original-Cartridge-N9K06AE/dp/B01EA0EG3W?pd_rd_w=2Tbp1&content-id=amzn1.sym.701f4cdb-5c61-4b0f-855d-750559e8d2d8&pf_rd_p=701f4cdb-5c61-4b0f-855d-750559e8d2d8&pf_rd_r=C1RMBDA0DZASF3JMB4FE&pd_rd_wg=irSM6&pd_rd_r=84051662-3b77-4b63-8b92-8bea4b657eac&pd_rd_i=B01EA0EG3W&psc=1&ref_=pd_bap_d_grid_rp_0_2_scp_i', 
-                                    'most_recent')
+def main():
+    # Example Garmin product IDs
+    garmin_products = [
+        'B091ZXYQXF',  # Garmin Venu 2
+        'DJ9WB3PIOUHB',  # Garmin Forerunner 55
+    ]
+    
+    scraper = AmazonScraper()
+    repo = ReviewRepository()
+    
+    for product_id in garmin_products:
+        print(f"\nProcessing product: {product_id}")
+        
+        # Get the latest review date we have for this product
+        latest_review_date = repo.get_latest_review_date(product_id)
+        if latest_review_date:
+            print(f"Found existing reviews, fetching reviews since {latest_review_date}")
+        
+        # Fetch reviews, passing the latest_review_date if we have one
+        reviews = scraper.get_product_reviews(product_id, since_date=latest_review_date)
+        print(f"Fetched {len(reviews)} new reviews")
+        
+        # Save the reviews and get statistics
+        if reviews:
+            stats = repo.save_reviews(reviews)
+            print("Storage statistics:")
+            print(f"- Attempted to save: {stats['attempted']}")
+            print(f"- Successfully saved: {stats['inserted']}")
+            print(f"- Duplicates skipped: {stats['duplicates']}")
+            
+            # Update metadata about when we last scraped this product
+            repo.update_product_metadata(product_id, datetime.utcnow())
+        
+        # Print sample of new reviews
+        print("\nSample of new reviews:")
+        for i, review in enumerate(reviews[:2], 1):
+            print(f"\nReview #{i}")
+            print(f"Title: {review.title}")
+            print(f"Rating: {'⭐' * review.rating}")
+            print(f"Date: {review.date.strftime('%d %B %Y')}")
+            print(f"Content: {review.content[:100]}...")
 
-# Test immediately by calling the function directly with a valid product URL and review type
-print("Testing the fetch_amazon_reviews function immediately...")
-fetch_amazon_reviews('https://www.amazon.co.uk/HP-Black-Original-Cartridge-N9K06AE/dp/B01EA0EG3W?pd_rd_w=2Tbp1&content-id=amzn1.sym.701f4cdb-5c61-4b0f-855d-750559e8d2d8&pf_rd_p=701f4cdb-5c61-4b0f-855d-750559e8d2d8&pf_rd_r=C1RMBDA0DZASF3JMB4FE&pd_rd_wg=irSM6&pd_rd_r=84051662-3b77-4b63-8b92-8bea4b657eac&pd_rd_i=B01EA0EG3W&psc=1&ref_=pd_bap_d_grid_rp_0_2_scp_i', 
-                    'most_recent')
-
-while True:
-    schedule.run_pending()
-    time.sleep(1)
+if __name__ == "__main__":
+    main()

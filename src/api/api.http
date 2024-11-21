@@ -10,10 +10,56 @@ POST {{baseUrl}}/api/products
 Content-Type: application/json
 
 {
-    "name": "Test Product",
-    "description": "This is a test product description",
-    "brand": "Test Brand",
-    "categories": ["Electronics", "Gadgets"]
+    "brand": "Garmin",
+    "model": "Forerunner 55",
+    "type": "Running Watch",
+    "sentiment": 4.5,
+    "reviewCount": 1250,
+    "imageUrl": "/images/products/garmin-forerunner-55.png"
+}
+###
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+{
+    "brand": "Garmin",
+    "model": "Fenix 7",
+    "type": "Multisport Watch",
+    "sentiment": 4.7,
+    "reviewCount": 890,
+    "imageUrl": "/images/products/garmin-fenix-7.jpg"
+}
+###
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+{
+    "brand": "Fitbit",
+    "model": "Sense 2",
+    "type": "Fitness Watch",
+    "sentiment": 4.2,
+    "reviewCount": 1500,
+    "imageUrl": "/images/products/fitbit-sense-2.jpg"
+}
+###
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+{
+    "brand": "Apple",
+    "model": "Watch Series 9",
+    "type": "Smartwatch",
+    "sentiment": 4.8,
+    "reviewCount": 3200,
+    "imageUrl": "/images/products/apple-watch-s9.jpg"
+}
+###
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+{
+    "brand": "Whoop",
+    "model": "4.0",
+    "type": "Fitness Tracker",
+    "sentiment": 4.3,
+    "reviewCount": 750,
+    "imageUrl": "/images/products/whoop-4.jpg"
 }
 
 ### Get all products
