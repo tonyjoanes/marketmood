@@ -1,219 +1,174 @@
+using Xunit;
 using FluentAssertions;
 using api.Domain;
 
-namespace api.tests.Domain
+namespace api.tests.Domain;
+
+public class ProductTests
 {
-    public class ProductTests
+    [Fact]
+    public void Create_WithValidInputs_ShouldCreateProduct()
     {
-        [Fact]
-        public void Create_WithValidData_ShouldCreateProduct()
-        {
-            // Arrange
-            var name = "Test Product";
-            var description = "Test Description";
-            var brand = "Test Brand";
-            var categories = new List<string> { "Category1" };
+        // Arrange
+        var brand = "Samsung";
+        var model = "Galaxy S21";
+        var type = "Smartphone";
+        var sentiment = 0.85;
+        var reviewCount = 100;
+        var imageUrl = "https://example.com/image.jpg";
 
-            // Act
-            var product = Product.Create(name, description, brand, categories);
+        // Act
+        var product = Product.Create(brand, model, type, sentiment, reviewCount, imageUrl);
 
-            // Assert
-            product.Should().NotBeNull();
-            product.Name.Should().Be(name);
-            product.Description.Should().Be(description);
-            product.Brand.Should().Be(brand);
-            product.Categories.Should().BeEquivalentTo(categories);
-            product.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
-            product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
-            product.Id.Should().BeNull();
-            product.Urls.Should().BeEmpty();
-            product.Reviews.Should().BeEmpty();
-        }
+        // Assert
+        product.Should().NotBeNull();
+        product.Brand.Should().Be(brand);
+        product.Model.Should().Be(model);
+        product.Type.Should().Be(type);
+        product.Sentiment.Should().Be(sentiment);
+        product.ReviewCount.Should().Be(reviewCount);
+        product.ImageUrl.Should().Be(imageUrl);
+        product.CreatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
+        product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
+    }
 
-        [Theory]
-        [InlineData("")]
-        [InlineData(null)]
-        [InlineData("   ")]
-        public void Create_WithInvalidName_ShouldThrowArgumentException(string invalidName)
-        {
-            // Arrange
-            var description = "Test Description";
-            var brand = "Test Brand";
-            var categories = new List<string> { "Category1" };
+    [Theory]
+    [InlineData("", "Model", "Invalid brand")]
+    [InlineData("Brand", "", "Invalid model")]
+    public void Create_WithInvalidInputs_ShouldThrowArgumentException(string brand, string model, string testCase)
+    {
+        // Act
+        var action = () => Product.Create(brand, model, "type", 0.5, 10, "url");
 
-            // Act & Assert
-            var act = () => Product.Create(invalidName, description, brand, categories);
-            act.Should().Throw<ArgumentException>()
-                .WithMessage("Name cannot be empty");
-        }
+        // Assert
+        action.Should().Throw<ArgumentException>()
+            .WithMessage("*cannot be empty", because: testCase);
+    }
 
-        [Fact]
-        public void Create_WithNullCategories_ShouldCreateEmptyCategoriesList()
-        {
-            // Arrange
-            var name = "Test Product";
-            var description = "Test Description";
-            var brand = "Test Brand";
+    [Fact]
+    public void Update_WithValidInputs_ShouldUpdateProduct()
+    {
+        // Arrange
+        var product = Product.Create("Initial", "Initial", "type", 0.5, 10, "url");
+        var newBrand = "Updated";
+        var newModel = "UpdatedModel";
+        var newType = "UpdatedType";
+        var newSentiment = 0.9;
+        var newReviewCount = 200;
+        var newImageUrl = "new-url";
 
-            // Act
-            var product = Product.Create(name, description, brand, null);
+        // Act
+        product.Update(newBrand, newModel, newType, newSentiment, newReviewCount, newImageUrl);
 
-            // Assert
-            product.Categories.Should().NotBeNull();
-            product.Categories.Should().BeEmpty();
-        }
+        // Assert
+        product.Brand.Should().Be(newBrand);
+        product.Model.Should().Be(newModel);
+        product.Type.Should().Be(newType);
+        product.Sentiment.Should().Be(newSentiment);
+        product.ReviewCount.Should().Be(newReviewCount);
+        product.ImageUrl.Should().Be(newImageUrl);
+        product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
+    }
 
-        [Fact]
-        public void Update_WithValidData_ShouldUpdateProduct()
-        {
-            // Arrange
-            var product = Product.Create("Initial Name", "Initial Description", "Initial Brand", new List<string> { "Initial Category" });
-            var originalCreatedAt = product.CreatedAt;
-            
-            var newName = "Updated Name";
-            var newDescription = "Updated Description";
-            var newBrand = "Updated Brand";
-            var newCategories = new List<string> { "New Category" };
+    [Fact]
+    public void AddUrl_ShouldAddUrlToList()
+    {
+        // Arrange
+        var product = Product.Create("Brand", "Model", "type", 0.5, 10, "url");
+        var domain = "amazon.com";
+        var url = "https://amazon.com/product";
 
-            // Act
-            product.Update(newName, newDescription, newBrand, newCategories);
+        // Act
+        product.AddUrl(domain, url);
 
-            // Assert
-            product.Name.Should().Be(newName);
-            product.Description.Should().Be(newDescription);
-            product.Brand.Should().Be(newBrand);
-            product.Categories.Should().BeEquivalentTo(newCategories);
-            product.CreatedAt.Should().Be(originalCreatedAt);
-            product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
-        }
+        // Assert
+        product.Urls.Should().ContainSingle();
+        product.Urls[0].Domain.Should().Be(domain);
+        product.Urls[0].Url.Should().Be(url);
+        product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
+    }
 
-        [Theory]
-        [InlineData("")]
-        [InlineData(null)]
-        [InlineData("   ")]
-        public void Update_WithInvalidName_ShouldThrowArgumentException(string invalidName)
-        {
-            // Arrange
-            var product = Product.Create("Initial Name", "Initial Description", "Initial Brand", new List<string> { "Initial Category" });
+    [Fact]
+    public void AddReview_ShouldAddReviewToList()
+    {
+        // Arrange
+        var product = Product.Create("Brand", "Model", "type", 0.5, 10, "url");
+        var review = ProductReview.Create(
+            "product-123",
+            "review-456",
+            5,
+            "Great product",
+            "This is amazing",
+            "John Doe",
+            DateTime.UtcNow,
+            true,
+            10
+        );
 
-            // Act & Assert
-            var act = () => product.Update(invalidName, "New Description", "New Brand", new List<string>());
-            act.Should().Throw<ArgumentException>()
-                .WithMessage("Name cannot be empty");
-        }
+        // Act
+        product.AddReview(review);
 
-        [Fact]
-        public void AddUrl_ShouldAddNewUrl()
-        {
-            // Arrange
-            var product = Product.Create("Test Product", "Description", "Brand", new List<string>());
-            var domain = "example.com";
-            var url = "https://example.com/product";
+        // Assert
+        product.Reviews.Should().ContainSingle();
+        var addedReview = product.Reviews[0];
+        addedReview.Should().Be(review);
+        addedReview.ProductId.Should().Be("product-123");
+        addedReview.ReviewId.Should().Be("review-456");
+        addedReview.Rating.Should().Be(5);
+        addedReview.Title.Should().Be("Great product");
+        addedReview.Content.Should().Be("This is amazing");
+        addedReview.Author.Should().Be("John Doe");
+        addedReview.VerifiedPurchase.Should().BeTrue();
+        addedReview.HelpfulVotes.Should().Be(10);
+        product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
+    }
 
-            // Act
-            product.AddUrl(domain, url);
+    [Fact]
+    public void AddMultipleReviews_ShouldAddAllReviewsToList()
+    {
+        // Arrange
+        var product = Product.Create("Brand", "Model", "type", 0.5, 10, "url");
+        var review1 = ProductReview.Create("pid", "r1", 4, "Title 1", "Content 1", "Author 1", DateTime.UtcNow, true, 5);
+        var review2 = ProductReview.Create("pid", "r2", 5, "Title 2", "Content 2", "Author 2", DateTime.UtcNow, false, 3);
 
-            // Assert
-            product.Urls.Should().HaveCount(1);
-            product.Urls[0].Domain.Should().Be(domain);
-            product.Urls[0].Url.Should().Be(url);
-            product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
-        }
+        // Act
+        product.AddReview(review1);
+        product.AddReview(review2);
 
-        [Fact]
-        public void AddReview_ShouldAddNewReview()
-        {
-            // Arrange
-            var product = Product.Create("Test Product", "Description", "Brand", new List<string>());
-            var review = Review.Create("Test Reviewer", "Great product!", 5.0m);
+        // Assert
+        product.Reviews.Should().HaveCount(2);
+        product.Reviews.Should().Contain(review1);
+        product.Reviews.Should().Contain(review2);
+        product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
+    }
 
-            // Act
-            product.AddReview(review);
+    [Fact]
+    public void UpdateImageUrl_ShouldUpdateImageUrlAndTimestamp()
+    {
+        // Arrange
+        var product = Product.Create("Brand", "Model", "type", 0.5, 10, "url");
+        var newImageUrl = "new-image-url";
 
-            // Assert
-            product.Reviews.Should().HaveCount(1);
-            product.Reviews[0].Should().Be(review);
-            product.Reviews[0].ReviewerName.Should().Be("Test Reviewer");
-            product.Reviews[0].ReviewText.Should().Be("Great product!");
-            product.Reviews[0].Rating.Should().Be(5.0m);
-            product.Reviews[0].ReviewDate.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
-            product.Reviews[0].Analysis.Should().BeNull();
-            product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
-        }
+        // Act
+        product.UpdateImageUrl(newImageUrl);
 
-        [Fact]
-        public void SetId_ShouldSetIdWhenNotAlreadySet()
-        {
-            // Arrange
-            var product = Product.Create("Test Product", "Description", "Brand", new List<string>());
-            var id = "test-id";
+        // Assert
+        product.ImageUrl.Should().Be(newImageUrl);
+        product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
+    }
 
-            // Act - Using reflection since SetId is internal
-            typeof(Product).GetMethod("SetId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                ?.Invoke(product, new object[] { id });
+    [Fact]
+    public void UpdateLastScrapedAt_ShouldUpdateScrapedTimestamp()
+    {
+        // Arrange
+        var product = Product.Create("Brand", "Model", "type", 0.5, 10, "url");
+        var scrapedAt = DateTime.UtcNow.AddHours(-1);
 
-            // Assert
-            product.Id.Should().Be(id);
-        }
+        // Act
+        product.UpdateLastScrapedAt(scrapedAt);
 
-        [Fact]
-        public void SetId_WhenIdAlreadySet_ShouldThrowInvalidOperationException()
-        {
-            // Arrange
-            var product = Product.Create("Test Product", "Description", "Brand", new List<string>());
-            var methodInfo = typeof(Product).GetMethod("SetId", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            methodInfo?.Invoke(product, new object[] { "initial-id" });
-
-            // Act & Assert
-            var act = () => methodInfo?.Invoke(product, new object[] { "new-id" });
-            act.Should().Throw<System.Reflection.TargetInvocationException>()
-                .WithInnerException<InvalidOperationException>()
-                .WithMessage("Cannot change existing ID");
-        }
-
-        [Fact]
-        public void UpdateAnalysis_ShouldUpdateAnalysisAndTimestamp()
-        {
-            // Arrange
-            var product = Product.Create("Test Product", "Description", "Brand", new List<string>());
-            var analysis = new ProductAnalysis();
-
-            // Act
-            product.UpdateAnalysis(analysis);
-
-            // Assert
-            product.Analysis.Should().Be(analysis);
-            product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
-        }
-
-        [Fact]
-        public void UpdateLastScrapedAt_ShouldUpdateScrapedAtAndTimestamp()
-        {
-            // Arrange
-            var product = Product.Create("Test Product", "Description", "Brand", new List<string>());
-            var scrapedAt = DateTime.UtcNow.AddHours(-1);
-
-            // Act
-            product.UpdateLastScrapedAt(scrapedAt);
-
-            // Assert
-            product.LastScrapedAt.Should().Be(scrapedAt);
-            product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
-        }
-
-        [Fact]
-        public void UpdateImageUrl_ShouldUpdateImagePathAndTimestamp()
-        {
-            // Arrange
-            var product = Product.Create("Test Product", "Description", "Brand", new List<string>());
-            var newImagePath = "/images/test.jpg";
-
-            // Act
-            product.UpdateImageUrl(newImagePath);
-
-            // Assert
-            product.ImagePath.Should().Be(newImagePath);
-            product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
-        }
+        // Assert
+        product.LastScrapedAt.Should().Be(scrapedAt);
+        product.UpdatedAt.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(1));
     }
 }
