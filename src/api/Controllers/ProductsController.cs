@@ -5,6 +5,7 @@ using api.Application.Products;
 using api.Application.Products.Commands;
 using api.Application.Products.DTOs;
 using api.Application.Products.Queries;
+using api.Application.Common.Exceptions;
 
 namespace api.Controllers
 {
@@ -85,7 +86,7 @@ namespace api.Controllers
                 await _mediator.Send(new Delete.Command { Id = id });
                 return NoContent();
             }
-            catch (Exception ex) when (ex.Message == "Product not found")
+            catch (ProductNotFoundException)
             {
                 return NotFound();
             }
