@@ -21,6 +21,7 @@ builder.Services.AddSingleton<IProductReviewDatabaseSettings>(sp =>
     sp.GetRequiredService<IOptions<ProductReviewDatabaseSettings>>().Value);
 
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<ISourceReviewRepository, SourceReviewRepository>();
 builder.Services.AddScoped<IProductReviewRepository, ProductReviewRepository>();
 
 // Register MongoDB client and database as services

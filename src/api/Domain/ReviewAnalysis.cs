@@ -3,22 +3,37 @@ namespace api.Domain
     public class ReviewAnalysis
     {
         public double SentimentScore { get; private set; }
-        public double SentimentMagnitude { get; private set; }
-        public List<string> Keywords { get; private set; }
-        public DateTime ProcessedAt { get; private set; }
+        public List<string> KeyPhrases { get; private set; }
+        public List<ThemeAnalysis> Themes { get; private set; }
+        public DateTime AnalyzedAt { get; private set; }
 
-        public ReviewAnalysis()
+        private ReviewAnalysis()
         {
-            Keywords = new List<string>();
-            ProcessedAt = DateTime.UtcNow;
+            KeyPhrases = new List<string>();
+            Themes = new List<ThemeAnalysis>();
         }
 
-        public void Update(double score, double magnitude, List<string> keywords)
+        public static ReviewAnalysis Create(double sentimentScore, IEnumerable<string> keyPhrases, IEnumerable<ThemeAnalysis> themes)
         {
-            SentimentScore = score;
-            SentimentMagnitude = magnitude;
-            Keywords = keywords;
-            ProcessedAt = DateTime.UtcNow;
+            return new ReviewAnalysis
+            {
+                SentimentScore = sentimentScore,
+                KeyPhrases = keyPhrases.ToList(),
+                Themes = themes.ToList(),
+                AnalyzedAt = DateTime.UtcNow
+            };
+        }
+
+        // Add this new method for creating empty analysis
+        public static ReviewAnalysis CreateEmpty()
+        {
+            return new ReviewAnalysis
+            {
+                SentimentScore = 0,
+                KeyPhrases = new List<string>(),
+                Themes = new List<ThemeAnalysis>(),
+                AnalyzedAt = DateTime.UtcNow
+            };
         }
     }
 }

@@ -3,36 +3,22 @@ using MongoDB.Bson.Serialization.Attributes;
 
 namespace api.Persistence.Entities
 {
-    public class ReviewEntity
+    using MongoDB.Bson;
+    using MongoDB.Bson.Serialization.Attributes;
+    using api.Domain;
+
+    public class SourceReviewEntity
     {
-        [BsonElement("ExternalId")]
-        public string ExternalId { get; set; }
-
-        [BsonElement("Source")]
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; }
+        public string ProductId { get; set; }
+        public string RawText { get; set; }
+        public ReviewStatus Status { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? LastProcessingAttempt { get; set; }
+        public ProductAnalysisEntity Analysis { get; set; }
+        public int ProcessingAttempts { get; set; }
         public string Source { get; set; }
-
-        [BsonElement("ReviewText")]
-        public string ReviewText { get; set; }
-
-        [BsonElement("Rating")]
-        public decimal Rating { get; set; }
-
-        [BsonElement("ReviewerName")]
-        public string ReviewerName { get; set; }
-
-        [BsonElement("ReviewDate")]
-        public DateTime ReviewDate { get; set; }
-
-        [BsonElement("Verified")]
-        public bool Verified { get; set; }
-
-        [BsonElement("Analysis")]
-        public ReviewAnalysisEntity Analysis { get; set; }
-
-        [BsonElement("ScrapedAt")]
-        public DateTime ScrapedAt { get; set; }
-
-        [BsonElement("ProcessedAt")]
-        public DateTime? ProcessedAt { get; set; }
     }
 }

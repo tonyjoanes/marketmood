@@ -1,24 +1,26 @@
-using api.Application.Common.Exceptions;
-using api.Application.ProductReview.DTOs;
 using MediatR;
+using api.Domain;
+using api.Application.Reviews.DTOs;
+using api.Persistence.Repositories;
 
-namespace api.Application.ProductReview.Commands
+namespace api.Application.SourceReviews.Commands
 {
-
     public class BatchCreate
     {
         public class Command : IRequest<BatchReviewResult>
         {
-            public List<CreateReviewRequest> Reviews { get; set; }
+            public List<CreateSourceReviewRequest> Reviews { get; set; }
         }
 
         public class Handler : IRequestHandler<Command, BatchReviewResult>
         {
-            private readonly IProductReviewRepository _repository;
+            private readonly ISourceReviewRepository _repository;
+            private readonly ILogger<Handler> _logger;
 
-            public Handler(IProductReviewRepository repository)
+            public Handler(ISourceReviewRepository repository, ILogger<Handler> logger)
             {
                 _repository = repository;
+                _logger = logger;
             }
 
             public async Task<BatchReviewResult> Handle(Command request, CancellationToken cancellationToken)
@@ -32,8 +34,7 @@ namespace api.Application.ProductReview.Commands
                 {
                     try
                     {
-                        var review = Domain.ProductReview.Create
-                        (
+                        var review = SourceReview.Create(
                             productId: reviewRequest.ProductId,
                             reviewId: reviewRequest.ReviewId,
                             rating: reviewRequest.Rating,
@@ -42,14 +43,16 @@ namespace api.Application.ProductReview.Commands
                             author: reviewRequest.Author,
                             date: reviewRequest.Date,
                             verifiedPurchase: reviewRequest.VerifiedPurchase,
-                            helpfulVotes: reviewRequest.HelpfulVotes
+                            helpfulVotes: reviewRequest.HelpfulVotes,
+                            source: reviewRequest.Source
                         );
 
-                        await _repository.AddAsync(review);
+                        await _repository.CreateReview(review);
                         result.Inserted++;
                     }
-                    catch (DuplicateReviewException)
+                    catch (Exception ex)
                     {
+                        _logger.LogError(ex, "Failed to create review {ReviewId}", reviewRequest.ReviewId);
                         result.Duplicates++;
                     }
                 }

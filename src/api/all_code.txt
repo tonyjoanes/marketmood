@@ -1,0 +1,2051 @@
+using api.Models;
+using api.Extensions;
+using Microsoft.Extensions.Options;
+using MongoDB.Driver;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using FluentValidation;
+using MediatR;
+using api.Application.Core;
+using api.Infrastructure;
+using api.Persistence.Repositories;
+
+
+var builder = WebApplication.CreateBuilder(args);
+
+
+// Add services to the container.
+builder.Services.Configure<ProductReviewDatabaseSettings>(
+    builder.Configuration.GetSection(nameof(ProductReviewDatabaseSettings)));
+
+builder.Services.AddSingleton<IProductReviewDatabaseSettings>(sp =>
+    sp.GetRequiredService<IOptions<ProductReviewDatabaseSettings>>().Value);
+
+// In Program.cs
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<IProductReviewRepository, ProductReviewRepository>();
+builder.Services.AddScoped<IReviewRepository, SourceReviewRepository>();
+
+// Register MongoDB client and database as services
+builder.Services.AddSingleton<IMongoClient, MongoClient>(sp =>
+{
+    var settings = sp.GetRequiredService<IOptions<ProductReviewDatabaseSettings>>().Value;
+    return new MongoClient(settings.ConnectionString);
+});
+
+builder.Services.AddScoped(sp =>
+{
+    var settings = sp.GetRequiredService<IOptions<ProductReviewDatabaseSettings>>().Value;
+    var client = sp.GetRequiredService<IMongoClient>();
+    return client.GetDatabase(settings.DatabaseName);
+});
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+builder.Services.AddMediatR(cfg =>
+{
+    cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
+    cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+});
+
+builder.Services.AddCustomHealthChecks(builder.Configuration);
+builder.Services.AddSingleton<IImageService, ImageService>();
+
+var app = builder.Build();
+
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
+
+        var response = new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(x => new
+            {
+                name = x.Key,
+                status = x.Value.Status.ToString(),
+                description = x.Value.Description,
+                duration = x.Value.Duration.ToString()
+            }),
+            duration = report.TotalDuration.ToString()
+        };
+
+        await context.Response.WriteAsJsonAsync(response);
+    }
+});
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+
+app.UseAuthorization();
+
+app.UseStaticFiles();
+
+app.MapControllers();
+
+app.Run();
+namespace api.Application.Common.Exceptions
+{
+    public class DuplicateReviewException : Exception
+    {
+        public DuplicateReviewException()
+            : base("A review with this ID already exists")
+        {
+        }
+
+        public DuplicateReviewException(string message)
+            : base(message)
+        {
+        }
+
+        public DuplicateReviewException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
+    }
+}
+namespace api.Application.Common.Exceptions;
+
+public class ProductNotFoundException : Exception
+{
+    public ProductNotFoundException(string id) 
+        : base($"Product with ID {id} was not found")
+    {
+    }
+}
+public interface IImageService
+{
+    Task<string> SaveImageAsync(IFormFile file);
+    void DeleteImage(string? imagePath);
+    string? GetImageUrl(string? imagePath);
+}
+using FluentValidation;
+using MediatR;
+
+namespace api.Application.Core
+{
+    public class ValidationBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : IRequest<TResponse>
+    {
+        private readonly IEnumerable<IValidator<TRequest>> _validators;
+
+        public ValidationBehavior(IEnumerable<IValidator<TRequest>> validators)
+        {
+            _validators = validators;
+        }
+
+        public async Task<TResponse> Handle(TRequest request, 
+            RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        {
+            if (_validators.Any())
+            {
+                var context = new ValidationContext<TRequest>(request);
+                var validationResults = await Task.WhenAll(
+                    _validators.Select(v => v.ValidateAsync(context, cancellationToken)));
+                var failures = validationResults
+                    .SelectMany(r => r.Errors)
+                    .Where(f => f != null)
+                    .ToList();
+
+                if (failures.Count != 0)
+                {
+                    throw new ValidationException(failures);
+                }
+            }
+            return await next();
+        }
+    }
+}
+using api.Application.Common.Exceptions;
+using api.Application.ProductReview.DTOs;
+using api.Persistence.Repositories;
+using MediatR;
+
+namespace api.Application.ProductReview.Commands
+{
+
+    public class BatchCreate
+    {
+        public class Command : IRequest<BatchReviewResult>
+        {
+            public List<CreateReviewRequest> Reviews { get; set; }
+        }
+
+        public class Handler : IRequestHandler<Command, BatchReviewResult>
+        {
+            private readonly IProductReviewRepository _repository;
+
+            public Handler(IProductReviewRepository repository)
+            {
+                _repository = repository;
+            }
+
+            public async Task<BatchReviewResult> Handle(Command request, CancellationToken cancellationToken)
+            {
+                var result = new BatchReviewResult
+                {
+                    Attempted = request.Reviews.Count
+                };
+
+                foreach (var reviewRequest in request.Reviews)
+                {
+                    try
+                    {
+                        var review = Domain.ProductReview.Create
+                        (
+                            productId: reviewRequest.ProductId,
+                            reviewId: reviewRequest.ReviewId,
+                            rating: reviewRequest.Rating,
+                            title: reviewRequest.Title,
+                            content: reviewRequest.Content,
+                            author: reviewRequest.Author,
+                            date: reviewRequest.Date,
+                            verifiedPurchase: reviewRequest.VerifiedPurchase,
+                            helpfulVotes: reviewRequest.HelpfulVotes
+                        );
+
+                        await _repository.AddAsync(review);
+                        result.Inserted++;
+                    }
+                    catch (DuplicateReviewException)
+                    {
+                        result.Duplicates++;
+                    }
+                }
+
+                return result;
+            }
+        }
+    }
+}
+using api.Application.Common.Exceptions;
+using api.Persistence.Repositories;
+using MediatR;
+
+namespace api.Application.ProductReview.Commands
+{
+    public class Create
+    {
+        public class Command : IRequest<Domain.ProductReview>
+        {
+            public string ProductId { get; set; }
+            public string ReviewId { get; set; }
+            public int Rating { get; set; }
+            public string Title { get; set; }
+            public string Content { get; set; }
+            public string Author { get; set; }
+            public DateTime Date { get; set; }
+            public bool VerifiedPurchase { get; set; }
+            public int HelpfulVotes { get; set; }
+        }
+
+        public class Handler : IRequestHandler<Command, Domain.ProductReview>
+        {
+            private readonly IProductReviewRepository _repository;
+
+            public Handler(IProductReviewRepository repository)
+            {
+                _repository = repository;
+            }
+
+            public async Task<Domain.ProductReview> Handle(Command request, CancellationToken cancellationToken)
+            {
+                if (await _repository.ExistsAsync(request.ReviewId))
+                    throw new DuplicateReviewException();
+
+                var review = Domain.ProductReview.Create(
+                    request.ProductId,
+                    request.ReviewId,
+                    request.Rating,
+                    request.Title,
+                    request.Content,
+                    request.Author,
+                    request.Date,
+                    request.VerifiedPurchase,
+                    request.HelpfulVotes
+                );
+
+                return await _repository.AddAsync(review);
+            }
+        }
+    }
+}
+using api.Persistence.Repositories;
+using MediatR;
+
+namespace api.Application.ProductReviews.Commands
+{
+    public class Delete
+    {
+        public class Command : IRequest<Unit>
+        {
+            public string Id { get; set; }
+        }
+
+        public class Handler : IRequestHandler<Command, Unit>
+        {
+            private readonly IProductReviewRepository _repository;
+
+            public Handler(IProductReviewRepository repository)
+            {
+                _repository = repository;
+            }
+
+            public async Task<Unit> Handle(Command request, CancellationToken cancellationToken)
+            {
+                var review = await _repository.GetByIdAsync(request.Id);
+
+                if (review == null)
+                    throw new Exception("ProductReview not found");
+
+                await _repository.DeleteAsync(request.Id);
+                return Unit.Value;
+            }
+        }
+    }
+}
+namespace api.Application.ProductReview.DTOs
+{
+    public class BatchReviewResult
+    {
+        public int Attempted { get; set; }
+        public int Inserted { get; set; }
+        public int Duplicates { get; set; }
+    }
+}
+namespace api.Application.ProductReview.DTOs
+{
+    public class CreateReviewRequest
+    {
+        public string ProductId { get; set; }
+        public string ReviewId { get; set; }
+        public int Rating { get; set; }
+        public string Title { get; set; }
+        public string Content { get; set; }
+        public string Author { get; set; }
+        public DateTime Date { get; set; }
+        public bool VerifiedPurchase { get; set; }
+        public int HelpfulVotes { get; set; }
+    }
+}
+using api.Persistence.Repositories;
+using MediatR;
+
+namespace api.Application.ProductReview.Queries
+{
+    public class Details
+    {
+        public class Query : IRequest<Domain.ProductReview>
+        {
+            public string Id { get; set; }
+        }
+
+        public class Handler : IRequestHandler<Query, Domain.ProductReview>
+        {
+            private readonly IProductReviewRepository _repository;
+
+            public Handler(IProductReviewRepository repository)
+            {
+                _repository = repository;
+            }
+
+            public async Task<Domain.ProductReview> Handle(Query request, CancellationToken cancellationToken)
+            {
+                return await _repository.GetByIdAsync(request.Id);
+            }
+        }
+    }
+}
+using api.Persistence.Repositories;
+using MediatR;
+
+namespace api.Application.ProductReview.Queries
+
+{
+    public class ListByProduct
+    {
+        public class Query : IRequest<List<Domain.ProductReview>>
+        {
+            public string ProductId { get; set; }
+        }
+
+        public class Handler : IRequestHandler<Query, List<Domain.ProductReview>>
+        {
+            private readonly IProductReviewRepository _repository;
+
+            public Handler(IProductReviewRepository repository)
+            {
+                _repository = repository;
+            }
+
+            public async Task<List<Domain.ProductReview>> Handle(Query request, CancellationToken cancellationToken)
+            {
+                return await _repository.GetReviewsByProductAsync(request.ProductId);
+            }
+        }
+    }
+}
+using api.Domain;
+using api.Persistence.Repositories;
+using FluentValidation;
+using MediatR;
+
+namespace api.Application.Products.Commands
+{
+    public static class Create
+    {
+        public class Command : IRequest<Product>
+        {
+            public string Brand { get; set; } = string.Empty;
+            public string Model { get; set; } = string.Empty;
+            public string Type { get; set; } = string.Empty;
+            public double Sentiment { get; set; } = 0;
+            public int ReviewCount { get; set; } = 0;
+            public string ImageUrl { get; set; } = "/images/products/placeholder.jpg";
+
+        }
+
+        public class Handler : IRequestHandler<Command, Product>
+        {
+            private readonly IProductRepository _productRepository;
+            private readonly IImageService _imageService;
+
+
+            public Handler(IProductRepository productRepository, IImageService imageService)
+            {
+                _imageService = imageService;
+                _productRepository = productRepository;
+            }
+
+            public async Task<Product> Handle(Command request, CancellationToken cancellationToken)
+            {
+                var product = Product.Create(
+                    brand: request.Brand,
+                    model: request.Model,
+                    type: request.Type,
+                    sentiment: request.Sentiment,
+                    reviewCount: request.ReviewCount,
+                    imageUrl: request.ImageUrl
+                );
+
+                // if (request.Image != null)
+                // {
+                //     product.ImagePath = await _imageService.SaveImageAsync(request.Image);
+                // }
+
+                await _productRepository.CreateAsync(product);
+                return product;
+            }
+        }
+
+        public class CommandValidator : AbstractValidator<Command>
+        {
+            public CommandValidator()
+            {
+                RuleFor(x => x.Brand).NotEmpty().MaximumLength(200);
+                RuleFor(x => x.Model).MaximumLength(2000);
+                RuleFor(x => x.Type).MaximumLength(100);
+                // RuleFor(x => x.Categories).Must(x => x.Count <= 10)
+                //     .WithMessage("Cannot have more than 10 categories");
+            }
+        }
+    }
+
+}
+using api.Infrastructure;
+using api.Persistence.Repositories;
+using MediatR;
+
+namespace api.Application.Products.Commands
+{
+    public static class Delete
+    {
+        public class Command : IRequest
+        {
+            public string Id { get; set; }
+        }
+
+        public class Handler : IRequestHandler<Command>
+        {
+            private readonly IProductRepository _productRepository;
+            private readonly IImageService _imageService;
+
+            public Handler(IProductRepository productRepository, IImageService imageService)
+            {
+                _productRepository = productRepository;
+                _imageService = imageService;
+            }
+
+            public async Task Handle(Command request, CancellationToken cancellationToken)
+            {
+                var product = await _productRepository.GetByIdAsync(request.Id);
+
+                if (product == null)
+                    throw new Exception("Product not found");
+
+                // _imageService.DeleteImage(product.ImagePath);
+
+                await _productRepository.DeleteAsync(request.Id);
+            }
+        }
+    }
+}
+using api.Application.Common.Exceptions;
+using api.Persistence.Repositories;
+using FluentValidation;
+using MediatR;
+
+namespace api.Application.Products.Commands
+{
+    public class Update
+    {
+        public class Command : IRequest
+        {
+            public string Id { get; set; } = string.Empty;
+            public string Model { get; set; } = string.Empty;
+            public string Type { get; set; } = string.Empty;
+            public string Brand { get; set; } = string.Empty;
+            public double Sentiment { get; set; } = 0;
+            public string ImageUrl { get; set; } = string.Empty;
+            public int ReviewCount { get; set; } = 0;
+
+        }
+
+        public class Handler : IRequestHandler<Command>
+        {
+            private readonly IProductRepository _productRepository;
+            private readonly IImageService _imageService;
+
+
+            public Handler(IProductRepository productRepository, IImageService imageService)
+            {
+                _productRepository = productRepository;
+                _imageService = imageService;
+
+            }
+
+            public async Task Handle(Command request, CancellationToken cancellationToken)
+            {
+                var product = await _productRepository.GetByIdAsync(request.Id);
+
+                if (product == null)
+                    throw new ProductNotFoundException(request.Id);
+
+                product.Update(
+                    brand: request.Brand,
+                    model: request.Model,
+                    type: request.Type,
+                    reviewCount: request.ReviewCount,
+                    sentiment: request.Sentiment,
+                    imageUrl: request.ImageUrl
+                );
+
+                // if (request.Image != null)
+                // {
+                //     var newImagePath = await _imageService.SaveImageAsync(request.Image);
+                //     _imageService.DeleteImage(product.ImagePath);
+                //     product.UpdateImageUrl(newImagePath);
+                // }
+
+                await _productRepository.UpdateAsync(request.Id, product);
+            }
+        }
+
+        public class CommandValidator : AbstractValidator<Command>
+        {
+            public CommandValidator()
+            {
+                RuleFor(x => x.Id).NotEmpty();
+                RuleFor(x => x.Brand)
+                    .NotEmpty()
+                    .MaximumLength(200);
+                RuleFor(x => x.Model)
+                    .MaximumLength(2000);
+                RuleFor(x => x.Type)
+                    .MaximumLength(100);
+                // RuleFor(x => x.Categories)
+                //     .Must(x => x.Count <= 10)
+                //     .WithMessage("Cannot have more than 10 categories");
+            }
+        }
+    }
+}
+namespace api.Application.Products.DTOs
+{
+    public class CreateProductRequest
+    {
+        public string Brand { get; set; } = string.Empty;
+        public string Model { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public double Sentiment { get; set; } = 0;
+        public int ReviewCount { get; set; } = 0;
+        public string ImageUrl { get; set; } = string.Empty;
+    }
+}
+namespace api.Application.Products.DTOs;
+
+public class UpdateProductRequest
+{
+    public string Brand { get; set; } = string.Empty;
+    public string Model { get; set; } = string.Empty;
+    public string Type { get; set; } = string.Empty;
+    public double Sentiment { get; set; } = 0;
+    public int ReviewCount { get; set; } = 0;
+    public string ImageUrl { get; set; } = string.Empty;
+}
+using api.Domain;
+using api.Persistence.Repositories;
+using MediatR;
+
+namespace api.Application.Products.Queries
+{
+    public static class Details
+    {
+        public class Query : IRequest<Product>
+        {
+            public string Id { get; set; }
+        }
+
+        public class Handler : IRequestHandler<Query, Product>
+        {
+            private readonly IProductRepository _productRepository;
+
+            public Handler(IProductRepository productRepository)
+            {
+                _productRepository = productRepository;
+            }
+
+            public async Task<Product> Handle(Query request, CancellationToken cancellationToken)
+            {
+                return await _productRepository.GetByIdAsync(request.Id);
+            }
+        }
+    }
+}
+using api.Domain;
+using api.Persistence.Repositories;
+using MediatR;
+
+namespace api.Application.Products.Queries
+{
+    public class List
+    {
+        public class Query : IRequest<List<Product>>
+        {
+        }
+
+        public class Handler : IRequestHandler<Query, List<Product>>
+        {
+            private IProductRepository _productRepository;
+
+            public Handler(IProductRepository productRepository)
+            {
+                _productRepository = productRepository;
+            }
+
+            public async Task<List<Product>> Handle(Query request, CancellationToken cancellationToken)
+            {
+                return await _productRepository.GetAllAsync();
+            }
+        }
+    }
+}
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
+using api.Domain;
+using api.Application.ProductReview.Commands;
+using api.Application.ProductReview.DTOs;
+using api.Application.ProductReview.Queries;
+using api.Application.ProductReviews.Commands;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class ProductReviewsController : ControllerBase
+    {
+        private readonly IMediator _mediator;
+
+        public ProductReviewsController(IMediator mediator)
+        {
+            _mediator = mediator;
+        }
+
+        [HttpGet("product/{productId}")]
+        public async Task<ActionResult<List<ProductReview>>> GetReviewsByProduct(string productId)
+        {
+            return await _mediator.Send(new ListByProduct.Query { ProductId = productId });
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<ProductReview>> GetReview(string id)
+        {
+            var review = await _mediator.Send(new Details.Query { Id = id });
+
+            if (review == null)
+                return NotFound();
+
+            return review;
+        }
+
+        [HttpPost("batch")]
+        public async Task<ActionResult<BatchReviewResult>> CreateReviews(List<CreateReviewRequest> requests)
+        {
+            var command = new BatchCreate.Command { Reviews = requests };
+            var result = await _mediator.Send(command);
+            return Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<ProductReview>> CreateReview(CreateReviewRequest request)
+        {
+            var command = new Create.Command
+            {
+                ProductId = request.ProductId,
+                ReviewId = request.ReviewId,
+                Rating = request.Rating,
+                Title = request.Title,
+                Content = request.Content,
+                Author = request.Author,
+                Date = request.Date,
+                VerifiedPurchase = request.VerifiedPurchase,
+                HelpfulVotes = request.HelpfulVotes
+            };
+
+            var review = await _mediator.Send(command);
+            return CreatedAtAction(nameof(GetReview), new { id = review.Id }, review);
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteReview(string id)
+        {
+            try
+            {
+                await _mediator.Send(new Delete.Command { Id = id });
+                return NoContent();
+            }
+            catch (Exception ex) when (ex.Message == "Review not found")
+            {
+                return NotFound();
+            }
+        }
+    }
+}
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
+using api.Domain;
+using api.Application.Products;
+using api.Application.Products.Commands;
+using api.Application.Products.DTOs;
+using api.Application.Products.Queries;
+using api.Application.Common.Exceptions;
+
+namespace api.Controllers
+{
+    [Route("api/[controller]")]
+    [ApiController]
+    public class ProductsController : ControllerBase
+    {
+        private readonly IMediator _mediator;
+
+        public ProductsController(IMediator mediator)
+        {
+            _mediator = mediator;
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<List<Product>>> GetProducts()
+        {
+            return await _mediator.Send(new List.Query());
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<Product>> GetProduct(string id)
+        {
+            var product = await _mediator.Send(new Details.Query { Id = id });
+
+            if (product == null)
+                return NotFound();
+
+            return product;
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<Product>> CreateProduct(CreateProductRequest request)
+        {
+            var command = new Create.Command
+            {
+                Brand = request.Brand,
+                Model = request.Model,
+                Type = request.Type,
+                ReviewCount = request.ReviewCount,
+                Sentiment = request.Sentiment,
+                ImageUrl = request.ImageUrl
+            };
+
+            var product = await _mediator.Send(command);
+            return CreatedAtAction(nameof(GetProduct), new { id = product.Id }, product);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> UpdateProduct(string id, UpdateProductRequest request)
+        {
+            try
+            {
+                await _mediator.Send(new Update.Command
+                {
+                    Id = id,
+                    Brand = request.Brand,
+                    Model = request.Model,
+                    Type = request.Type,
+                    ReviewCount = request.ReviewCount,
+                    Sentiment = request.Sentiment,
+                    ImageUrl = request.ImageUrl
+                });
+
+                return NoContent();
+            }
+            catch (Exception ex) when (ex.Message == "Product not found")
+            {
+                return NotFound();
+            }
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> DeleteProduct(string id)
+        {
+            try
+            {
+                await _mediator.Send(new Delete.Command { Id = id });
+                return NoContent();
+            }
+            catch (ProductNotFoundException)
+            {
+                return NotFound();
+            }
+        }
+    }
+}
+namespace api.Domain
+{
+    public class Product
+    {
+        public string? Id { get; private set; }
+        public string Brand { get; private set; }
+        public string Model { get; private set; }
+        public double Sentiment { get; private set; }
+        public int ReviewCount { get; private set; }
+        public string? ImageUrl { get; set; }
+        public string Type { get; set; }
+        public List<string> Categories { get; private set; }
+        public List<ProductUrl> Urls { get; private set; }
+        public List<ProductReview> Reviews { get; private set; }
+        public ProductAnalysis Analysis { get; private set; }
+        public DateTime CreatedAt { get; private set; }
+        public DateTime UpdatedAt { get; private set; }
+        public DateTime? LastScrapedAt { get; private set; }
+
+        private Product()
+        {
+            Brand = string.Empty;
+            Model = string.Empty;
+            ReviewCount = 0;
+            Categories = new List<string>();
+            Urls = new List<ProductUrl>();
+            Reviews = new List<ProductReview>();
+            Analysis = new ProductAnalysis();
+            CreatedAt = DateTime.UtcNow;
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        private Product(string brand, string model, string type, double sentiment, int reviewCount, string imageUrl)
+        {
+            if (string.IsNullOrWhiteSpace(brand))
+                throw new ArgumentException("Brand cannot be empty");
+
+            if (string.IsNullOrWhiteSpace(model))
+                throw new ArgumentException("Model cannot be empty");
+
+            Brand = brand;
+            Model = model;
+            Type = type;
+            Sentiment = sentiment;
+            ReviewCount = reviewCount;
+            ImageUrl = imageUrl;
+            Categories = [];
+            Urls = new List<ProductUrl>();
+            Reviews = new List<ProductReview>();
+            Analysis = new ProductAnalysis();
+            CreatedAt = DateTime.UtcNow;
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        public static Product Create(string brand, string model, string type, double sentiment, int reviewCount, string imageUrl)
+        {
+            return new Product(brand, model, type, sentiment, reviewCount, imageUrl);
+        }
+
+        public void Update(string brand, string model, string type, double sentiment, int reviewCount, string imageUrl)
+        {
+            if (string.IsNullOrWhiteSpace(brand))
+                throw new ArgumentException("Name cannot be empty");
+            if (string.IsNullOrWhiteSpace(model))
+                throw new ArgumentException("Model cannot be empty");
+
+            Model = model;
+            Brand = brand;
+            Type = type;
+            Sentiment = sentiment;
+            ReviewCount = reviewCount;
+            ImageUrl = imageUrl;
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        public void AddUrl(string domain, string url)
+        {
+            var productUrl = new ProductUrl(domain, url);
+            Urls.Add(productUrl);
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        public void AddReview(ProductReview review)
+        {
+            Reviews.Add(review);
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        public void UpdateAnalysis(ProductAnalysis analysis)
+        {
+            Analysis = analysis;
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        public void UpdateLastScrapedAt(DateTime scrapedAt)
+        {
+            LastScrapedAt = scrapedAt;
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        public void UpdateImageUrl(string newImagePath)
+        {
+            ImageUrl = newImagePath;
+            UpdatedAt = DateTime.UtcNow;
+        }
+
+        internal void SetId(string id)
+        {
+            if (!string.IsNullOrEmpty(Id))
+                throw new InvalidOperationException("Cannot change existing ID");
+
+            Id = id;
+        }
+    }
+}
+namespace api.Domain
+{
+    public class ProductAnalysis
+    {
+        public double OverallSentiment { get; private set; }
+        public int ReviewCount { get; private set; }
+        public Dictionary<int, int> RatingDistribution { get; private set; }
+        public List<ThemeAnalysis> CommonThemes { get; private set; }
+        public DateTime LastUpdated { get; private set; }
+
+        public ProductAnalysis()
+        {
+            RatingDistribution = new Dictionary<int, int>();
+            CommonThemes = new List<ThemeAnalysis>();
+            LastUpdated = DateTime.UtcNow;
+        }
+
+        public void Update(double sentiment, int reviewCount,
+            Dictionary<int, int> ratingDistribution, List<ThemeAnalysis> themes)
+        {
+            OverallSentiment = sentiment;
+            ReviewCount = reviewCount;
+            RatingDistribution = ratingDistribution;
+            CommonThemes = themes;
+            LastUpdated = DateTime.UtcNow;
+        }
+    }
+}
+namespace api.Domain
+{
+    public class ProductReview
+    {
+        public string? Id { get; private set; }
+        public string ReviewId { get; private set; }  // References the original review
+        public int Rating { get; private set; }
+        public string Content { get; private set; }
+        public DateTime ReviewDate { get; private set; }
+        public double SentimentScore { get; private set; }
+        public List<string> KeyPhrases { get; private set; }
+        public List<ThemeAnalysis> Themes { get; private set; }
+        public DateTime AnalyzedAt { get; private set; }
+
+        private ProductReview()
+        {
+            ReviewId = string.Empty;
+            Content = string.Empty;
+            KeyPhrases = new List<string>();
+            Themes = new List<ThemeAnalysis>();
+        }
+
+        public static ProductReview CreateFromReview(SourceReview review, double sentimentScore,
+            List<string> keyPhrases, List<ThemeAnalysis> themes)
+        {
+            return new ProductReview
+            {
+                ReviewId = review.ReviewId,
+                Rating = review.Rating,
+                Content = review.Content,
+                ReviewDate = review.Date,
+                SentimentScore = sentimentScore,
+                KeyPhrases = keyPhrases,
+                Themes = themes,
+                AnalyzedAt = DateTime.UtcNow
+            };
+        }
+
+        public void SetId(string id)
+        {
+            if (!string.IsNullOrEmpty(Id))
+                throw new InvalidOperationException("Cannot change existing ID");
+            Id = id;
+        }
+    }
+}
+namespace api.Domain
+{
+    // Supporting domain classes
+    public class ProductUrl
+    {
+        public string Domain { get; private set; }
+        public string Url { get; private set; }
+        public DateTime? LastScrapedAt { get; private set; }
+
+        private ProductUrl()
+        {
+            Domain = string.Empty;
+            Url = string.Empty;
+        }
+
+        public ProductUrl(string domain, string url)
+        {
+            if (string.IsNullOrEmpty(domain))
+                throw new ArgumentException("Domain cannot be empty");
+            if (string.IsNullOrEmpty(url))
+                throw new ArgumentException("URL cannot be empty");
+
+            Domain = domain;
+            Url = url;
+        }
+
+        public void UpdateLastScrapedAt(DateTime scrapedAt)
+        {
+            LastScrapedAt = scrapedAt;
+        }
+    }
+}
+namespace api.Domain
+{
+    public class ReviewAnalysis
+    {
+        public double SentimentScore { get; private set; }
+        public List<string> KeyPhrases { get; private set; }
+        public List<ThemeAnalysis> Themes { get; private set; }
+        public DateTime AnalyzedAt { get; private set; }
+
+        private ReviewAnalysis()
+        {
+            KeyPhrases = new List<string>();
+            Themes = new List<ThemeAnalysis>();
+        }
+
+        public static ReviewAnalysis Create(double sentimentScore, IEnumerable<string> keyPhrases, IEnumerable<ThemeAnalysis> themes)
+        {
+            return new ReviewAnalysis
+            {
+                SentimentScore = sentimentScore,
+                KeyPhrases = keyPhrases.ToList(),
+                Themes = themes.ToList(),
+                AnalyzedAt = DateTime.UtcNow
+            };
+        }
+
+        // Add this new method for creating empty analysis
+        public static ReviewAnalysis CreateEmpty()
+        {
+            return new ReviewAnalysis
+            {
+                SentimentScore = 0,
+                KeyPhrases = new List<string>(),
+                Themes = new List<ThemeAnalysis>(),
+                AnalyzedAt = DateTime.UtcNow
+            };
+        }
+    }
+}
+namespace api.Domain
+{
+    public enum ReviewStatus
+    {
+        New,
+        Processing,
+        Analyzed,
+        Failed,
+        StaleProcessing
+    }
+}
+namespace api.Domain
+{
+    public class SourceReview
+    {
+        public string? Id { get; private set; }
+        public string ProductId { get; private set; }
+        public string ReviewId { get; private set; }
+        public int Rating { get; private set; }
+        public string Title { get; private set; }
+        public string Content { get; private set; }
+        public string Author { get; private set; }
+        public DateTime Date { get; private set; }
+        public bool VerifiedPurchase { get; private set; }
+        public int HelpfulVotes { get; private set; }
+        public DateTime CreatedAt { get; private set; }
+        public ReviewStatus Status { get; private set; }
+        public string Source { get; private set; }  // e.g., "Amazon", "Argos"
+
+        private SourceReview()
+        {
+            ProductId = string.Empty;
+            ReviewId = string.Empty;
+            Title = string.Empty;
+            Content = string.Empty;
+            Author = string.Empty;
+            Source = string.Empty;
+            CreatedAt = DateTime.UtcNow;
+            Status = ReviewStatus.New;
+        }
+
+        private SourceReview(string productId, string reviewId, int rating, string title,
+            string content, string author, DateTime date, bool verifiedPurchase,
+            int helpfulVotes, string source)
+        {
+            if (string.IsNullOrWhiteSpace(productId))
+                throw new ArgumentException("ProductId cannot be empty");
+            if (string.IsNullOrWhiteSpace(reviewId))
+                throw new ArgumentException("ReviewId cannot be empty");
+            if (rating < 1 || rating > 5)
+                throw new ArgumentException("Rating must be between 1 and 5");
+
+            ProductId = productId;
+            ReviewId = reviewId;
+            Rating = rating;
+            Title = title;
+            Content = content;
+            Author = author;
+            Date = date;
+            VerifiedPurchase = verifiedPurchase;
+            HelpfulVotes = helpfulVotes;
+            Source = source;
+            CreatedAt = DateTime.UtcNow;
+            Status = ReviewStatus.New;
+        }
+
+        public static SourceReview Create(
+            string productId,
+            string reviewId,
+            int rating,
+            string title,
+            string content,
+            string author,
+            DateTime date,
+            bool verifiedPurchase,
+            int helpfulVotes,
+            string source)
+        {
+            return new SourceReview(
+                productId, reviewId, rating, title, content,
+                author, date, verifiedPurchase, helpfulVotes, source);
+        }
+
+        public void MarkAsProcessing()
+        {
+            Status = ReviewStatus.Processing;
+        }
+
+        public void MarkAsProcessed()
+        {
+            Status = ReviewStatus.Analyzed;
+        }
+
+        public void MarkAsFailed()
+        {
+            Status = ReviewStatus.Failed;
+        }
+
+        public void SetId(string id)
+        {
+            if (!string.IsNullOrEmpty(Id))
+                throw new InvalidOperationException("Cannot change existing ID");
+            Id = id;
+        }
+    }
+}
+namespace api.Domain
+{
+    public class ThemeAnalysis
+    {
+        public string Theme { get; private set; }
+        public int Count { get; private set; }
+        public double SentimentScore { get; private set; }
+
+        private ThemeAnalysis()
+        {
+            Theme = string.Empty;
+        }
+
+        public static ThemeAnalysis Create(string theme, int count, double sentimentScore)
+        {
+            return new ThemeAnalysis
+            {
+                Theme = theme,
+                Count = count,
+                SentimentScore = sentimentScore
+            };
+        }
+    }
+}
+namespace api.Extensions
+{
+    using api.Models;
+    using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+    public static class HealthCheckExtensions
+    {
+        public static IServiceCollection AddCustomHealthChecks(this IServiceCollection services, IConfiguration configuration)
+        {
+            var settings = configuration.GetSection("ProductReviewDatabaseSettings")
+                             .Get<ProductReviewDatabaseSettings>();
+
+            services.AddHealthChecks()
+                .AddMongoDb(
+                    mongodbConnectionString: settings.ConnectionString,
+                    name: "mongodb",
+                    failureStatus: HealthStatus.Unhealthy
+                );
+
+            return services;
+        }
+    }
+}
+namespace api.Infrastructure;
+
+public class ImageService : IImageService
+{
+    private readonly string _imageDirectory;
+    private readonly IWebHostEnvironment _environment;
+    private readonly string _baseUrl;
+
+    public ImageService(
+        IWebHostEnvironment environment,
+        IConfiguration configuration)
+    {
+        // _environment = environment;
+        // _imageDirectory = Path.Combine(_environment.WebRootPath, "images");
+        // _baseUrl = configuration["BaseUrl"] ?? "http://localhost:5000";
+
+        // if (!Directory.Exists(_imageDirectory))
+        // {
+        //     Directory.CreateDirectory(_imageDirectory);
+        // }
+    }
+
+    public async Task<string> SaveImageAsync(IFormFile file)
+    {
+        if (file == null || file.Length == 0)
+            throw new ArgumentException("Invalid file");
+
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/gif" };
+        if (!allowedTypes.Contains(file.ContentType.ToLower()))
+            throw new ArgumentException("Invalid file type");
+
+        if (file.Length > 5 * 1024 * 1024)
+            throw new ArgumentException("File size exceeds limit");
+
+        var fileName = $"{Guid.NewGuid()}{Path.GetExtension(file.FileName)}";
+        var filePath = Path.Combine(_imageDirectory, fileName);
+
+        using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await file.CopyToAsync(stream);
+        }
+
+        return $"/images/{fileName}";
+    }
+
+    public void DeleteImage(string? imagePath)
+    {
+        if (string.IsNullOrEmpty(imagePath))
+            return;
+
+        var fullPath = Path.Combine(_environment.WebRootPath, imagePath.TrimStart('/'));
+        if (File.Exists(fullPath))
+        {
+            File.Delete(fullPath);
+        }
+    }
+
+    public string? GetImageUrl(string? imagePath)
+    {
+        if (string.IsNullOrEmpty(imagePath))
+            return null;
+
+        return $"{_baseUrl}{imagePath}";
+    }
+}
+// <autogenerated />
+using System;
+using System.Reflection;
+[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v8.0", FrameworkDisplayName = ".NET 8.0")]
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: System.Reflection.AssemblyCompanyAttribute("api")]
+[assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1ece8ec59926d2a84fe0d971a2bac3fec21063c5")]
+[assembly: System.Reflection.AssemblyProductAttribute("api")]
+[assembly: System.Reflection.AssemblyTitleAttribute("api")]
+[assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+// <auto-generated/>
+global using global::Microsoft.AspNetCore.Builder;
+global using global::Microsoft.AspNetCore.Hosting;
+global using global::Microsoft.AspNetCore.Http;
+global using global::Microsoft.AspNetCore.Routing;
+global using global::Microsoft.Extensions.Configuration;
+global using global::Microsoft.Extensions.DependencyInjection;
+global using global::Microsoft.Extensions.Hosting;
+global using global::Microsoft.Extensions.Logging;
+global using global::System;
+global using global::System.Collections.Generic;
+global using global::System.IO;
+global using global::System.Linq;
+global using global::System.Net.Http;
+global using global::System.Net.Http.Json;
+global using global::System.Threading;
+global using global::System.Threading.Tasks;
+//------------------------------------------------------------------------------
+// <auto-generated>
+//     This code was generated by a tool.
+//
+//     Changes to this file may cause incorrect behavior and will be lost if
+//     the code is regenerated.
+// </auto-generated>
+//------------------------------------------------------------------------------
+
+using System;
+using System.Reflection;
+
+[assembly: Microsoft.AspNetCore.Mvc.ApplicationParts.ApplicationPartAttribute("FluentValidation.AspNetCore")]
+[assembly: Microsoft.AspNetCore.Mvc.ApplicationParts.ApplicationPartAttribute("Microsoft.AspNetCore.OpenApi")]
+[assembly: Microsoft.AspNetCore.Mvc.ApplicationParts.ApplicationPartAttribute("Swashbuckle.AspNetCore.SwaggerGen")]
+
+// Generated by the MSBuild WriteCodeFragment class.
+
+namespace api.Persistence.Configurations
+{
+    public class MongoDbSettings
+    {
+        public string ConnectionString { get; set; }
+        public string DatabaseName { get; set; }
+    }
+
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities
+{
+    public class KeyPhraseEntity
+    {
+        [BsonElement("Phrase")]
+        public string Phrase { get; set; }
+
+        [BsonElement("Frequency")]
+        public int Frequency { get; set; }
+
+        [BsonElement("SentimentScore")]
+        public double SentimentScore { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities
+{
+    public class KeywordEntity
+    {
+        [BsonElement("Word")]
+        public string Word { get; set; }
+
+        [BsonElement("Weight")]
+        public double Weight { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities
+{
+    public class ProductAnalysisEntity
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; }
+
+        public string ProductId { get; set; }
+        public double OverallSentiment { get; set; }
+        public int TotalReviews { get; set; }
+        public List<ThemeAnalysisEntity> ThemeSentiments { get; set; } = new();
+        public DateTime LastUpdated { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities
+{
+    public class ProductEntity
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; }
+
+        [BsonElement("Model")]
+        public string Model { get; set; }
+
+        [BsonElement("Brand")]
+        public string Brand { get; set; }
+
+        [BsonElement("ImageUrl")]
+        public string? ImageUrl { get; set; }
+
+        [BsonElement("Type")]
+        public string Type { get; set; }
+
+        [BsonElement("ReviewCount")]
+        public int ReviewCount { get; set; }
+
+        [BsonElement("Sentiment")]
+        public double Sentiment { get; set; }
+
+        [BsonElement("CreatedAt")]
+        public DateTime CreatedAt { get; set; }
+
+        [BsonElement("UpdatedAt")]
+        public DateTime UpdatedAt { get; set; }
+
+        [BsonElement("LastScrapedAt")]
+        public DateTime? LastScrapedAt { get; set; }
+    }
+}
+namespace api.Models
+{
+    public class ProductReviewDatabaseSettings : IProductReviewDatabaseSettings
+    {
+        public string ProductsCollectionName { get; set; }
+        public string ReviewsCollectionName { get; set; }
+        public string ConnectionString { get; set; }
+        public string DatabaseName { get; set; }
+    }
+
+    public interface IProductReviewDatabaseSettings
+    {
+        string ProductsCollectionName { get; set; }
+        string ReviewsCollectionName { get; set; }
+        string ConnectionString { get; set; }
+        string DatabaseName { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities.Models
+{
+    public class ProductReviewEntity
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; }
+
+        public string ProductId { get; set; }
+
+        [BsonElement("review_id")]
+        public string ReviewId { get; set; }
+
+        public int Rating { get; set; }
+
+        public string Title { get; set; }
+
+        public string Content { get; set; }
+
+        public string Author { get; set; }
+
+        public DateTime Date { get; set; }
+
+        public bool VerifiedPurchase { get; set; }
+
+        public int HelpfulVotes { get; set; }
+
+        [BsonElement("created_at")]
+        public DateTime CreatedAt { get; set; }
+
+        [BsonElement("updated_at")]
+        public DateTime UpdatedAt { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities
+{
+    public class ProductUrlEntity
+    {
+        [BsonElement("Domain")]
+        public string Domain { get; set; }
+
+        [BsonElement("Url")]
+        public string Url { get; set; }
+
+        [BsonElement("ProductId")]
+        public string ProductId { get; set; }
+
+        [BsonElement("LastScrapedAt")]
+        public DateTime? LastScrapedAt { get; set; }
+
+        [BsonElement("Active")]
+        public bool Active { get; set; } = true;
+
+        [BsonElement("ScrapingErrors")]
+        public List<ScrapingErrorEntity> ScrapingErrors { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Models
+{
+    public class Review
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; }
+
+        [BsonElement("ProductId")]
+        public string ProductId { get; set; }
+
+        [BsonElement("ReviewId")]
+        public string ReviewId { get; set; }
+
+        [BsonElement("Text")]
+        public string Text { get; set; }
+
+        [BsonElement("Rating")]
+        public string Rating { get; set; }
+
+        [BsonElement("CaptureDate")]
+        public DateTime CaptureDate { get; set; }
+
+        [BsonElement("Sentiment")]
+        public string Sentiment { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities
+{
+    using MongoDB.Bson;
+    using MongoDB.Bson.Serialization.Attributes;
+    using api.Domain;
+
+    public class ReviewEntity
+    {
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; }
+        public string ProductId { get; set; }
+        public string RawText { get; set; }
+        public ReviewStatus Status { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? LastProcessingAttempt { get; set; }
+        public ProductAnalysisEntity Analysis { get; set; }
+        public int ProcessingAttempts { get; set; }
+        public string Source { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities
+{
+    public class ScrapingErrorEntity
+    {
+        [BsonElement("Timestamp")]
+        public DateTime Timestamp { get; set; }
+
+        [BsonElement("ErrorMessage")]
+        public string ErrorMessage { get; set; }
+
+        [BsonElement("ErrorType")]
+        public string ErrorType { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities
+{
+    public class SentimentTrendPointEntity
+    {
+        [BsonElement("Date")]
+        public DateTime Date { get; set; }
+
+        [BsonElement("Sentiment")]
+        public double Sentiment { get; set; }
+
+        [BsonElement("ReviewCount")]
+        public int ReviewCount { get; set; }
+    }
+}
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
+
+namespace api.Persistence.Entities
+{
+    public class ThemeAnalysisEntity
+    {
+        public string Theme { get; set; }
+        public int Count { get; set; }
+        public double SentimentScore { get; set; }
+    }
+}
+using api.Domain;
+
+namespace api.Persistence.Repositories
+{
+    public interface IProductRepository
+    {
+        Task<List<Product>> GetAllAsync();
+        Task<Product> GetByIdAsync(string id);
+        Task CreateAsync(Product product);
+        Task UpdateAsync(string id, Product updatedProduct);
+        Task DeleteAsync(string id);
+        Task UpdateProductAnalysis(string productId, double overallSentiment, int totalReviews, List<ThemeAnalysis> themes);
+    }
+}
+using api.Domain;
+
+namespace api.Persistence.Repositories
+{
+    public interface IProductReviewRepository
+    {
+        Task<ProductReview> GetByIdAsync(string id);
+        Task<List<ProductReview>> GetReviewsByProductAsync(string productId);
+        Task<ProductReview> AddAsync(ProductReview review);
+        Task DeleteAsync(string id);
+        Task<bool> ExistsAsync(string reviewId);
+    }
+}
+using api.Domain;
+
+namespace api.Persistence.Repositories
+{
+    public interface ISourceReviewRepository
+    {
+        Task<IEnumerable<SourceReview>> GetReviewsByStatuses(ReviewStatus[] statuses);
+        Task<SourceReview> GetReviewById(string id);
+        Task UpdateReview(SourceReview review);
+        Task<IEnumerable<SourceReview>> GetAnalyzedReviewsForProduct(string productId);
+        Task CreateReview(SourceReview review);
+    }
+}
+using api.Domain;
+using api.Persistence.Entities;
+using MongoDB.Driver;
+
+namespace api.Persistence.Repositories
+{
+    public class ProductRepository : IProductRepository
+    {
+        private readonly IMongoCollection<ProductEntity> _productsCollection;
+        private readonly IMongoCollection<ProductAnalysisEntity> _productAnalysisCollection;
+        private readonly ILogger<ProductRepository> _logger;
+
+        public ProductRepository(IMongoDatabase database, ILogger<ProductRepository> logger)
+        {
+            _productsCollection = database.GetCollection<ProductEntity>("Products");
+            _productAnalysisCollection = database.GetCollection<ProductAnalysisEntity>("ProductAnalyses");
+            _logger = logger;
+        }
+
+        public async Task<List<Product>> GetAllAsync()
+        {
+            var entities = await _productsCollection.Find(_ => true).ToListAsync();
+            return entities.Select(MapToDomain).ToList();
+        }
+
+        public async Task<Product> GetByIdAsync(string id)
+        {
+            var entity = await _productsCollection.Find(p => p.Id == id).FirstOrDefaultAsync();
+            return entity != null ? MapToDomain(entity) : null;
+        }
+
+        public async Task CreateAsync(Product product)
+        {
+            var entity = MapToEntity(product);
+            await _productsCollection.InsertOneAsync(entity);
+            product.SetId(entity.Id);
+        }
+
+        public async Task UpdateAsync(string id, Product product)
+        {
+            var entity = MapToEntity(product);
+            entity.Id = id;
+            await _productsCollection.ReplaceOneAsync(p => p.Id == id, entity);
+        }
+
+        public async Task DeleteAsync(string id)
+        {
+            await _productsCollection.DeleteOneAsync(p => p.Id == id);
+            await _productAnalysisCollection.DeleteOneAsync(p => p.ProductId == id);
+        }
+
+        public async Task UpdateProductAnalysis(string productId, double overallSentiment, int totalReviews, List<ThemeAnalysis> themes)
+        {
+            var entity = new ProductAnalysisEntity
+            {
+                ProductId = productId,
+                OverallSentiment = overallSentiment,
+                TotalReviews = totalReviews,
+                ThemeSentiments = themes.Select(t => new ThemeAnalysisEntity
+                {
+                    Theme = t.Theme,
+                    Count = t.Count,
+                    SentimentScore = t.SentimentScore
+                }).ToList(),
+                LastUpdated = DateTime.UtcNow
+            };
+
+            var filter = Builders<ProductAnalysisEntity>.Filter.Eq(p => p.ProductId, productId);
+            var options = new ReplaceOptions { IsUpsert = true };
+            await _productAnalysisCollection.ReplaceOneAsync(filter, entity, options);
+        }
+
+        private static Product MapToDomain(ProductEntity entity)
+        {
+            var product = Product.Create(
+                brand: entity.Brand,
+                model: entity.Model,
+                type: entity.Type,
+                reviewCount: entity.ReviewCount,
+                sentiment: entity.Sentiment,
+                imageUrl: entity.ImageUrl ?? "/images/products/placeholder.jpg"
+            );
+
+            product.SetId(entity.Id);
+            return product;
+        }
+
+        private static ProductEntity MapToEntity(Product domain)
+        {
+            if (domain == null)
+                throw new ArgumentNullException(nameof(domain));
+
+            return new ProductEntity
+            {
+                Id = domain.Id,
+                Brand = domain.Brand ?? throw new ArgumentException("Name cannot be null"),
+                Model = domain.Model ?? string.Empty,
+                Type = domain.Type,
+                ReviewCount = domain.ReviewCount,
+                Sentiment = domain.Sentiment,
+                ImageUrl = domain.ImageUrl,
+                CreatedAt = domain.CreatedAt,
+                UpdatedAt = domain.UpdatedAt,
+                LastScrapedAt = domain.LastScrapedAt
+            };
+        }
+    }
+}
+using api.Domain;
+using api.Persistence.Entities.Models;
+using MongoDB.Driver;
+
+namespace api.Persistence.Repositories
+{
+
+    public class ProductReviewRepository : IProductReviewRepository
+    {
+        private readonly IMongoCollection<ProductReviewEntity> _reviewsCollection;
+        private readonly ILogger<ProductReviewRepository> _logger;
+
+        public ProductReviewRepository(IMongoDatabase database, ILogger<ProductReviewRepository> logger)
+        {
+            _reviewsCollection = database.GetCollection<ProductReviewEntity>("ProductReviews");
+            _logger = logger;
+        }
+
+        public async Task<ProductReview> GetByIdAsync(string id)
+        {
+            var entity = await _reviewsCollection.Find(p => p.Id == id).FirstOrDefaultAsync();
+            return entity != null ? MapToDomain(entity) : null;
+        }
+
+        public async Task<List<ProductReview>> GetReviewsByProductAsync(string productId)
+        {
+            var entities = await _reviewsCollection.Find(r => r.ProductId == productId).ToListAsync();
+            return entities.Select(MapToDomain).ToList();
+        }
+
+        public async Task<ProductReview> AddAsync(ProductReview review)
+        {
+            var entity = MapToEntity(review);
+            await _reviewsCollection.InsertOneAsync(entity);
+            review.SetId(entity.Id);
+            return review;
+        }
+
+        public async Task DeleteAsync(string id)
+        {
+            await _reviewsCollection.DeleteOneAsync(r => r.Id == id);
+        }
+
+        public async Task<bool> ExistsAsync(string reviewId)
+        {
+            return await _reviewsCollection.Find(r => r.ReviewId == reviewId).AnyAsync();
+        }
+
+        private static ProductReview MapToDomain(ProductReviewEntity entity)
+        {
+            var review = ProductReview.Create(
+                productId: entity.ProductId,
+                reviewId: entity.ReviewId,
+                rating: entity.Rating,
+                title: entity.Title,
+                content: entity.Content,
+                author: entity.Author,
+                date: entity.Date,
+                verifiedPurchase: entity.VerifiedPurchase,
+                helpfulVotes: entity.HelpfulVotes
+            );
+
+            review.SetId(entity.Id);
+            return review;
+        }
+
+        private static ProductReviewEntity MapToEntity(ProductReview domain)
+        {
+            return new ProductReviewEntity
+            {
+                Id = domain.Id,
+                ProductId = domain.ProductId,
+                ReviewId = domain.ReviewId,
+                Rating = domain.Rating,
+                Title = domain.Title,
+                Content = domain.Content,
+                Author = domain.Author,
+                Date = domain.Date,
+                VerifiedPurchase = domain.VerifiedPurchase,
+                HelpfulVotes = domain.HelpfulVotes,
+                CreatedAt = domain.CreatedAt,
+                UpdatedAt = domain.UpdatedAt
+            };
+        }
+    }
+}
+using api.Domain;
+using api.Persistence.Entities;
+using MongoDB.Driver;
+
+namespace api.Persistence.Repositories
+{
+    public class SourceReviewRepository : ISourceReviewRepository
+    {
+        private readonly IMongoCollection<ReviewEntity> _reviewsCollection;
+        private readonly ILogger<SourceReviewRepository> _logger;
+
+        public SourceReviewRepository(IMongoDatabase database, ILogger<SourceReviewRepository> logger)
+        {
+            _reviewsCollection = database.GetCollection<ReviewEntity>("Reviews");
+            _logger = logger;
+        }
+
+        public async Task<IEnumerable<SourceReview>> GetReviewsByStatuses(ReviewStatus[] statuses)
+        {
+            try
+            {
+                var filter = Builders<ReviewEntity>.Filter.In(r => r.Status, statuses);
+                var entities = await _reviewsCollection.Find(filter)
+                    .Sort(Builders<ReviewEntity>.Sort.Ascending(r => r.CreatedAt))
+                    .ToListAsync();
+
+                return entities.Select(MapReviewToDomain);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting reviews by statuses: {Statuses}", string.Join(", ", statuses));
+                throw;
+            }
+        }
+
+        public async Task<SourceReview> GetReviewById(string id)
+        {
+            try
+            {
+                var entity = await _reviewsCollection.Find(r => r.Id == id).FirstOrDefaultAsync();
+                return entity != null ? MapReviewToDomain(entity) : null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting review: {ReviewId}", id);
+                throw;
+            }
+        }
+
+        public async Task CreateReview(SourceReview review)
+        {
+            try
+            {
+                var entity = MapReviewToEntity(review);
+                await _reviewsCollection.InsertOneAsync(entity);
+                review.SetId(entity.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating review for product: {ProductId}", review.ProductId);
+                throw;
+            }
+        }
+
+        public async Task UpdateReview(SourceReview review)
+        {
+            try
+            {
+                var entity = MapReviewToEntity(review);
+                var result = await _reviewsCollection.ReplaceOneAsync(r => r.Id == review.Id, entity);
+                if (!result.IsAcknowledged)
+                    throw new Exception($"Failed to update review {review.Id}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating review: {ReviewId}", review.Id);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<SourceReview>> GetAnalyzedReviewsForProduct(string productId)
+        {
+            try
+            {
+                var filter = Builders<ReviewEntity>.Filter.And(
+                    Builders<ReviewEntity>.Filter.Eq(r => r.ProductId, productId),
+                    Builders<ReviewEntity>.Filter.Eq(r => r.Status, ReviewStatus.Analyzed)
+                );
+
+                var entities = await _reviewsCollection.Find(filter).ToListAsync();
+                return entities.Select(MapReviewToDomain);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting analyzed reviews for product: {ProductId}", productId);
+                throw;
+            }
+        }
+
+        private static SourceReview MapReviewToDomain(ReviewEntity entity)
+        {
+            var review = SourceReview.Create(
+                productId: entity.ProductId,
+                rawText: entity.RawText,
+                source: entity.Source
+            );
+
+            review.SetId(entity.Id);
+
+            if (entity.Analysis != null)
+            {
+                var themes = entity.Analysis.ThemeSentiments.Select(t =>
+                    ThemeAnalysis.Create(
+                        theme: t.Theme,
+                        count: t.Count,
+                        sentimentScore: t.SentimentScore
+                    ));
+
+                var analysis = ReviewAnalysis.Create(
+                    sentimentScore: entity.Analysis.OverallSentiment,
+                    keyPhrases: new List<string>(),
+                    themes: themes
+                );
+
+                review.SetAnalysis(analysis);
+            }
+
+            return review;
+        }
+
+        private static ReviewEntity MapReviewToEntity(SourceReview review)
+        {
+            var entity = new ReviewEntity
+            {
+                Id = review.Id,
+                ProductId = review.ProductId,
+                RawText = review.RawText,
+                Status = review.Status,
+                CreatedAt = review.CreatedAt,
+                LastProcessingAttempt = review.LastProcessingAttempt,
+                ProcessingAttempts = review.ProcessingAttempts,
+                Source = review.Source
+            };
+
+            if (review.Analysis != null)
+            {
+                entity.Analysis = new ProductAnalysisEntity
+                {
+                    OverallSentiment = review.Analysis.SentimentScore,
+                    ThemeSentiments = review.Analysis.Themes.Select(t => new ThemeAnalysisEntity
+                    {
+                        Theme = t.Theme,
+                        Count = t.Count,
+                        SentimentScore = t.SentimentScore
+                    }).ToList(),
+                };
+            }
+
+            return entity;
+        }
+    }
+}

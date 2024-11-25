@@ -7,33 +7,36 @@ namespace api.Persistence.Repositories
     public class ProductRepository : IProductRepository
     {
         private readonly IMongoCollection<ProductEntity> _productsCollection;
+        private readonly IMongoCollection<ProductAnalysisEntity> _productAnalysisCollection;
+        private readonly ILogger<ProductRepository> _logger;
 
-        public ProductRepository(IMongoDatabase database)
+        public ProductRepository(IMongoDatabase database, ILogger<ProductRepository> logger)
         {
             _productsCollection = database.GetCollection<ProductEntity>("Products");
+            _productAnalysisCollection = database.GetCollection<ProductAnalysisEntity>("ProductAnalyses");
+            _logger = logger;
         }
 
-        public async Task<List<Domain.Product>> GetAllAsync()
+        public async Task<List<Product>> GetAllAsync()
         {
             var entities = await _productsCollection.Find(_ => true).ToListAsync();
             return entities.Select(MapToDomain).ToList();
         }
 
-        public async Task<Domain.Product> GetByIdAsync(string id)
+        public async Task<Product> GetByIdAsync(string id)
         {
             var entity = await _productsCollection.Find(p => p.Id == id).FirstOrDefaultAsync();
             return entity != null ? MapToDomain(entity) : null;
         }
 
-        public async Task CreateAsync(Domain.Product product)
+        public async Task CreateAsync(Product product)
         {
             var entity = MapToEntity(product);
             await _productsCollection.InsertOneAsync(entity);
-            // Update the ID in the domain object after creation
             product.SetId(entity.Id);
         }
 
-        public async Task UpdateAsync(string id, Domain.Product product)
+        public async Task UpdateAsync(string id, Product product)
         {
             var entity = MapToEntity(product);
             entity.Id = id;
@@ -43,6 +46,28 @@ namespace api.Persistence.Repositories
         public async Task DeleteAsync(string id)
         {
             await _productsCollection.DeleteOneAsync(p => p.Id == id);
+            await _productAnalysisCollection.DeleteOneAsync(p => p.ProductId == id);
+        }
+
+        public async Task UpdateProductAnalysis(string productId, double overallSentiment, int totalReviews, List<ThemeAnalysis> themes)
+        {
+            var entity = new ProductAnalysisEntity
+            {
+                ProductId = productId,
+                OverallSentiment = overallSentiment,
+                TotalReviews = totalReviews,
+                ThemeSentiments = themes.Select(t => new ThemeAnalysisEntity
+                {
+                    Theme = t.Theme,
+                    Count = t.Count,
+                    SentimentScore = t.SentimentScore
+                }).ToList(),
+                LastUpdated = DateTime.UtcNow
+            };
+
+            var filter = Builders<ProductAnalysisEntity>.Filter.Eq(p => p.ProductId, productId);
+            var options = new ReplaceOptions { IsUpsert = true };
+            await _productAnalysisCollection.ReplaceOneAsync(filter, entity, options);
         }
 
         private static Product MapToDomain(ProductEntity entity)
@@ -67,7 +92,7 @@ namespace api.Persistence.Repositories
 
             return new ProductEntity
             {
-                Id = domain.Id,  // Can be null for new products
+                Id = domain.Id,
                 Brand = domain.Brand ?? throw new ArgumentException("Name cannot be null"),
                 Model = domain.Model ?? string.Empty,
                 Type = domain.Type,
@@ -76,7 +101,7 @@ namespace api.Persistence.Repositories
                 ImageUrl = domain.ImageUrl,
                 CreatedAt = domain.CreatedAt,
                 UpdatedAt = domain.UpdatedAt,
-                LastScrapedAt = domain.LastScrapedAt  // DateTime? can be null
+                LastScrapedAt = domain.LastScrapedAt
             };
         }
     }

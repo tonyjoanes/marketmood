@@ -5,28 +5,14 @@ namespace api.Persistence.Entities
 {
     public class ProductAnalysisEntity
     {
-        [BsonElement("OverallSentiment")]
+        [BsonId]
+        [BsonRepresentation(BsonType.ObjectId)]
+        public string Id { get; set; }
+
+        public string ProductId { get; set; }
         public double OverallSentiment { get; set; }
-
-        [BsonElement("ReviewCount")]
-        public int ReviewCount { get; set; }
-
-        [BsonElement("AverageRating")]
-        public decimal AverageRating { get; set; }
-
-        [BsonElement("RatingDistribution")]
-        public Dictionary<int, int> RatingDistribution { get; set; }
-
-        [BsonElement("CommonThemes")]
-        public List<ThemeAnalysisEntity> CommonThemes { get; set; }
-
-        [BsonElement("KeyPhrases")]
-        public List<KeyPhraseEntity> KeyPhrases { get; set; }
-
-        [BsonElement("SentimentTrend")]
-        public List<SentimentTrendPointEntity> SentimentTrend { get; set; }
-
-        [BsonElement("LastUpdated")]
+        public int TotalReviews { get; set; }
+        public List<ThemeAnalysisEntity> ThemeSentiments { get; set; } = new();
         public DateTime LastUpdated { get; set; }
     }
 }

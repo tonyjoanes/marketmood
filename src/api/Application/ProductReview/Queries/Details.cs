@@ -1,3 +1,4 @@
+using api.Persistence.Repositories;
 using MediatR;
 
 namespace api.Application.ProductReview.Queries

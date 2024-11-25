@@ -9,5 +9,6 @@ namespace api.Persistence.Repositories
         Task CreateAsync(Product product);
         Task UpdateAsync(string id, Product updatedProduct);
         Task DeleteAsync(string id);
+        Task UpdateProductAnalysis(string productId, double overallSentiment, int totalReviews, List<ThemeAnalysis> themes);
     }
 }
