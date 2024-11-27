@@ -3,7 +3,6 @@ namespace api.Application.Reviews.DTOs
     public class CreateSourceReviewRequest
     {
         public string ProductId { get; set; }
-        public string ReviewId { get; set; }
         public int Rating { get; set; }
         public string Title { get; set; }
         public string Content { get; set; }

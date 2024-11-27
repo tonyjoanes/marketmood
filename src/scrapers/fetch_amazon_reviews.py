@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 from typing import List, Dict, Optional
 import time
 import random
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import datetime
 
 @dataclass
@@ -18,6 +18,7 @@ class Review:
     date: datetime
     verified_purchase: bool
     helpful_votes: int
+    source: str
 
 class ReviewRepository:
     def __init__(self, connection_string: str = "mongodb://localhost:27017"):
@@ -89,7 +90,7 @@ class AmazonScraper:
                 
                 if response.status_code == 200:
                     page_reviews = self._parse_reviews_page(response.content, product_id)
-                    
+                    print(page_reviews)
                     # If we have a since_date, only keep newer reviews
                     if since_date:
                         page_reviews = [r for r in page_reviews if r.date > since_date]
@@ -114,6 +115,7 @@ class AmazonScraper:
         soup = BeautifulSoup(html_content, 'html.parser')
         review_elements = soup.find_all('div', {'data-hook': 'review'})
         reviews = []
+        print(soup.prettify())
         
         for element in review_elements:
             try:
@@ -169,12 +171,55 @@ class AmazonScraper:
                 author=author,
                 date=date,
                 verified_purchase=verified_purchase,
-                helpful_votes=helpful_votes
+                helpful_votes=helpful_votes,
+                source="amazon"
             )
             
         except Exception as e:
             print(f"Error parsing review details: {str(e)}")
             return None
+
+# def main():
+#     # Example Garmin product IDs
+#     garmin_products = [
+#         'B091ZXYQXF',  # Garmin Venu 2
+#         'DJ9WB3PIOUHB',  # Garmin Forerunner 55
+#     ]
+    
+#     scraper = AmazonScraper()
+#     repo = ReviewRepository()
+    
+#     for product_id in garmin_products:
+#         print(f"\nProcessing product: {product_id}")
+        
+#         # Get the latest review date we have for this product
+#         latest_review_date = repo.get_latest_review_date(product_id)
+#         if latest_review_date:
+#             print(f"Found existing reviews, fetching reviews since {latest_review_date}")
+        
+#         # Fetch reviews, passing the latest_review_date if we have one
+#         reviews = scraper.get_product_reviews(product_id, since_date=latest_review_date)
+#         print(f"Fetched {len(reviews)} new reviews")
+        
+#         # Save the reviews and get statistics
+#         if reviews:
+#             # stats = repo.save_reviews(reviews)
+#             print("Storage statistics:")
+#             print(f"- Attempted to save: {stats['attempted']}")
+#             print(f"- Successfully saved: {stats['inserted']}")
+#             print(f"- Duplicates skipped: {stats['duplicates']}")
+            
+#             # Update metadata about when we last scraped this product
+#             repo.update_product_metadata(product_id, datetime.utcnow())
+        
+#         # Print sample of new reviews
+#         print("\nSample of new reviews:")
+#         for i, review in enumerate(reviews[:2], 1):
+#             print(f"\nReview #{i}")
+#             print(f"Title: {review.title}")
+#             print(f"Rating: {'⭐' * review.rating}")
+#             print(f"Date: {review.date.strftime('%d %B %Y')}")
+#             print(f"Content: {review.content[:100]}...")
 
 def main():
     # Example Garmin product IDs
@@ -184,39 +229,26 @@ def main():
     ]
     
     scraper = AmazonScraper()
-    repo = ReviewRepository()
     
     for product_id in garmin_products:
         print(f"\nProcessing product: {product_id}")
         
-        # Get the latest review date we have for this product
-        latest_review_date = repo.get_latest_review_date(product_id)
-        if latest_review_date:
-            print(f"Found existing reviews, fetching reviews since {latest_review_date}")
+        # Fetch reviews
+        reviews = scraper.get_product_reviews(product_id)
+        print(f"Fetched {len(reviews)} reviews")
         
-        # Fetch reviews, passing the latest_review_date if we have one
-        reviews = scraper.get_product_reviews(product_id, since_date=latest_review_date)
-        print(f"Fetched {len(reviews)} new reviews")
-        
-        # Save the reviews and get statistics
-        if reviews:
-            stats = repo.save_reviews(reviews)
-            print("Storage statistics:")
-            print(f"- Attempted to save: {stats['attempted']}")
-            print(f"- Successfully saved: {stats['inserted']}")
-            print(f"- Duplicates skipped: {stats['duplicates']}")
-            
-            # Update metadata about when we last scraped this product
-            repo.update_product_metadata(product_id, datetime.utcnow())
-        
-        # Print sample of new reviews
-        print("\nSample of new reviews:")
-        for i, review in enumerate(reviews[:2], 1):
+        # Print all reviews
+        print("\nSample of reviews:")
+        for i, review in enumerate(reviews, 1):
             print(f"\nReview #{i}")
             print(f"Title: {review.title}")
             print(f"Rating: {'⭐' * review.rating}")
             print(f"Date: {review.date.strftime('%d %B %Y')}")
-            print(f"Content: {review.content[:100]}...")
+            print(f"Content: {review.content}")
+            print(f"Author: {review.author}")
+            print(f"Verified Purchase: {'Yes' if review.verified_purchase else 'No'}")
+            print(f"Helpful Votes: {review.helpful_votes}")
+
 
 if __name__ == "__main__":
     main()

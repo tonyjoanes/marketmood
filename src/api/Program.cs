@@ -51,6 +51,17 @@ builder.Services.AddMediatR(cfg =>
 builder.Services.AddCustomHealthChecks(builder.Configuration);
 builder.Services.AddSingleton<IImageService, ImageService>();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend",
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:3000")
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+});
+
 var app = builder.Build();
 
 app.MapHealthChecks("/health", new HealthCheckOptions
@@ -90,5 +101,7 @@ app.UseAuthorization();
 app.UseStaticFiles();
 
 app.MapControllers();
+
+app.UseCors("AllowFrontend");
 
 app.Run();

@@ -4,7 +4,6 @@ using MongoDB.Driver;
 
 namespace api.Persistence.Repositories
 {
-
     public class ProductReviewRepository : IProductReviewRepository
     {
         private readonly IMongoCollection<ProductReviewEntity> _reviewsCollection;
@@ -36,28 +35,13 @@ namespace api.Persistence.Repositories
             return review;
         }
 
-        public async Task DeleteAsync(string id)
-        {
-            await _reviewsCollection.DeleteOneAsync(r => r.Id == id);
-        }
-
-        public async Task<bool> ExistsAsync(string reviewId)
-        {
-            return await _reviewsCollection.Find(r => r.ReviewId == reviewId).AnyAsync();
-        }
-
         private static ProductReview MapToDomain(ProductReviewEntity entity)
         {
             var review = ProductReview.Create(
                 productId: entity.ProductId,
-                reviewId: entity.ReviewId,
-                rating: entity.Rating,
-                title: entity.Title,
-                content: entity.Content,
-                author: entity.Author,
-                date: entity.Date,
-                verifiedPurchase: entity.VerifiedPurchase,
-                helpfulVotes: entity.HelpfulVotes
+                averageRating: entity.AverageRating,
+                sentimentScore: entity.SentimentScore,
+                keyPhrases: entity.KeyPhrases, reviewCount: entity.ReviewCount
             );
 
             review.SetId(entity.Id);
@@ -70,17 +54,20 @@ namespace api.Persistence.Repositories
             {
                 Id = domain.Id,
                 ProductId = domain.ProductId,
-                ReviewId = domain.ReviewId,
-                Rating = domain.Rating,
-                Title = domain.Title,
-                Content = domain.Content,
-                Author = domain.Author,
-                Date = domain.Date,
-                VerifiedPurchase = domain.VerifiedPurchase,
-                HelpfulVotes = domain.HelpfulVotes,
-                CreatedAt = domain.CreatedAt,
-                UpdatedAt = domain.UpdatedAt
+                Date = domain.ReviewDate,
+                SentimentScore = domain.SentimentScore,
+                AverageRating = domain.AverageRating
             };
+        }
+
+        public Task DeleteAsync(string id)
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<bool> ExistsAsync(string reviewId)
+        {
+            throw new NotImplementedException();
         }
     }
 }

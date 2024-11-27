@@ -1,5 +1,4 @@
 using api.Domain;
-using api.Persistence.Entities;
 using MongoDB.Driver;
 
 namespace api.Persistence.Repositories
@@ -53,7 +52,6 @@ namespace api.Persistence.Repositories
             {
                 var entity = MapReviewToEntity(review);
                 await _reviewsCollection.InsertOneAsync(entity);
-                review.SetId(entity.Id);
             }
             catch (Exception ex)
             {
@@ -78,55 +76,32 @@ namespace api.Persistence.Repositories
             }
         }
 
-        public async Task<IEnumerable<SourceReview>> GetAnalyzedReviewsForProduct(string productId)
-        {
-            try
-            {
-                var filter = Builders<SourceReviewEntity>.Filter.And(
-                    Builders<SourceReviewEntity>.Filter.Eq(r => r.ProductId, productId),
-                    Builders<SourceReviewEntity>.Filter.Eq(r => r.Status, ReviewStatus.Analyzed)
-                );
-
-                var entities = await _reviewsCollection.Find(filter).ToListAsync();
-                return entities.Select(MapReviewToDomain);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting analyzed reviews for product: {ProductId}", productId);
-                throw;
-            }
-        }
-
         private static SourceReview MapReviewToDomain(SourceReviewEntity entity)
         {
             var review = SourceReview.Create(
                 productId: entity.ProductId,
-                reviewId: entity.Id,
-                title: string.Empty,
-                content: entity.RawText,
-                source: entity.Source
+                rating: entity.Rating,
+                content: entity.Content,
+                source: entity.Source,
+                date: entity.Date
             );
 
             review.SetId(entity.Id);
-
+            review.SetStatus(entity.Status);
             return review;
         }
 
         private static SourceReviewEntity MapReviewToEntity(SourceReview review)
         {
-            var entity = new SourceReviewEntity
+            return new SourceReviewEntity
             {
-                Id = review.Id,
                 ProductId = review.ProductId,
-                RawText = review.Content,
+                Rating = review.Rating,
+                Content = review.Content,
+                Date = review.Date,
                 Status = review.Status,
-                CreatedAt = review.CreatedAt,
-                LastProcessingAttempt = review.LastProcessingAttempt,
-                ProcessingAttempts = review.ProcessingAttempts,
-                Source = review.Source
+                CreatedAt = review.CreatedAt
             };
-
-            return entity;
         }
     }
 }

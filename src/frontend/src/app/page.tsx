@@ -1,11 +1,9 @@
-// app/page.tsx
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import SearchBar from '@/components/SearchBar';
 import ProductCard from '@/components/ProductCard';
 import { Product } from '@/types/Product';
-import { productsData } from '@/data/Products';
 import { productService } from '@/services/ProductService';
 
 // Separate ProductGrid component
@@ -33,6 +31,7 @@ const Page = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,11 +40,15 @@ const Page = () => {
 
   const loadProducts = async () => {
     try {
+      setIsLoading(true);
       const data = await productService.getProducts();
       setProducts(data);
+      setError(null);
     } catch (err) {
       setError('Failed to load products');
       console.error(err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -55,7 +58,7 @@ const Page = () => {
       const searchLower = query.toLowerCase();
       const fullName = `${product.brand} ${product.model}`.toLowerCase();
       return fullName.includes(searchLower) ||
-        product.type.toLowerCase().includes(searchLower);
+        product.type?.toLowerCase().includes(searchLower);
     });
     setSearchResults(filtered);
     setIsSearching(false);
@@ -63,6 +66,10 @@ const Page = () => {
 
   if (error) {
     return <div className="text-red-600 p-4">{error}</div>;
+  }
+
+  if (isLoading) {
+    return <div className="text-gray-600 p-4">Loading products...</div>;
   }
 
   return (
@@ -77,7 +84,7 @@ const Page = () => {
             Analyze thousands of reviews instantly. Make informed decisions with AI-powered insights.
           </p>
 
-          <SearchBar onSearch={handleSearch} products={productsData} />
+          <SearchBar onSearch={handleSearch} products={products} />
 
           {isSearching && (
             <div className="mt-4 text-gray-600">
@@ -92,10 +99,10 @@ const Page = () => {
         <ProductGrid products={searchResults} title="Search Results" />
       )}
 
-      {/* Show Trending Products only if no search results */}
+      {/* Show All Products if no search results */}
       {searchResults.length === 0 && !isSearching && (
         <>
-          <ProductGrid products={productsData} title="Trending Products" />
+          <ProductGrid products={products} title="All Products" />
 
           {/* Market Insights Section */}
           <section className="py-12 px-4 bg-white">

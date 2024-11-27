@@ -14,19 +14,15 @@ namespace api.Persistence.Entities.Models
         [BsonElement("review_id")]
         public string ReviewId { get; set; }
 
-        public int Rating { get; set; }
+        public string Source { get; set; }
 
-        public string Title { get; set; }
-
-        public string Content { get; set; }
-
-        public string Author { get; set; }
+        public double SentimentScore { get; set; }
+        public double AverageRating { get; set; }
+        public List<string> KeyPhrases { get; set; }
+        public DateTime AnalyzedAt { get; set; }
+        public int ReviewCount { get; set; }
 
         public DateTime Date { get; set; }
-
-        public bool VerifiedPurchase { get; set; }
-
-        public int HelpfulVotes { get; set; }
 
         [BsonElement("created_at")]
         public DateTime CreatedAt { get; set; }

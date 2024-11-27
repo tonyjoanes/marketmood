@@ -36,15 +36,10 @@ namespace api.Application.SourceReviews.Commands
                     {
                         var review = SourceReview.Create(
                             productId: reviewRequest.ProductId,
-                            reviewId: reviewRequest.ReviewId,
                             rating: reviewRequest.Rating,
-                            title: reviewRequest.Title,
                             content: reviewRequest.Content,
-                            author: reviewRequest.Author,
-                            date: reviewRequest.Date,
-                            verifiedPurchase: reviewRequest.VerifiedPurchase,
-                            helpfulVotes: reviewRequest.HelpfulVotes,
-                            source: reviewRequest.Source
+                            source: reviewRequest.Source,
+                            date: reviewRequest.Date
                         );
 
                         await _repository.CreateReview(review);
@@ -52,7 +47,7 @@ namespace api.Application.SourceReviews.Commands
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Failed to create review {ReviewId}", reviewRequest.ReviewId);
+                        _logger.LogError(ex, "Failed to create review for product {ProductId}", reviewRequest.ProductId);
                         result.Duplicates++;
                     }
                 }

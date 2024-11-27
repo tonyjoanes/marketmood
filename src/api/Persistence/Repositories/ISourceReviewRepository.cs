@@ -6,8 +6,7 @@ namespace api.Persistence.Repositories
     {
         Task<IEnumerable<SourceReview>> GetReviewsByStatuses(ReviewStatus[] statuses);
         Task<SourceReview> GetReviewById(string id);
-        Task UpdateReview(SourceReview review);
-        Task<IEnumerable<SourceReview>> GetAnalyzedReviewsForProduct(string productId);
         Task CreateReview(SourceReview review);
+        Task UpdateReview(SourceReview review);
     }
 }
